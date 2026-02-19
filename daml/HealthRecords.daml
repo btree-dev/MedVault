@@ -1,0 +1,751 @@
+{-# LANGUAGE ApplicativeDo #-}
+module HealthRecords where
+
+import DA.Date hiding (date)
+import DA.Date qualified as Date (date)
+import DA.Time
+import DA.Text as T
+import Daml.Script
+
+-- Helper to avoid ambiguity with record field names
+mkDate : Int -> Month -> Int -> Date
+mkDate = Date.date
+
+-- ============================================================
+-- DATA TYPES
+-- ============================================================
+
+data PatientInfo = PatientInfo with
+  name : Text
+  dateOfBirth : Date
+  bloodType : Text
+  emergencyContact : Text
+    deriving (Eq, Show)
+
+data Allergy = Allergy with
+  name : Text
+  severity : Text         -- "mild", "moderate", "severe"
+  reaction : Text
+    deriving (Eq, Show)
+
+data Condition = Condition with
+  name : Text
+  diagnosedDate : Date
+  status : Text           -- "active", "resolved"
+  notes : Text
+    deriving (Eq, Show)
+
+data Medication = Medication with
+  name : Text
+  dosage : Text
+  frequency : Text
+  prescribedDate : Date
+  prescribedBy : Text
+    deriving (Eq, Show)
+
+data Surgery = Surgery with
+  procedure : Text
+  date : Date
+  surgeon : Text
+  hospital : Text
+  notes : Text
+    deriving (Eq, Show)
+
+data Illness = Illness with
+  name : Text
+  startDate : Date
+  endDate : Optional Date
+  severity : Text
+  notes : Text
+    deriving (Eq, Show)
+
+data DiagnosticRecord = DiagnosticRecord with
+  diagType : Text
+  date : Date
+  facility : Text
+  findings : Text
+  orderedBy : Text
+    deriving (Eq, Show)
+
+data PrescriptionRecord = PrescriptionRecord with
+  medication : Text
+  date : Date
+  doctor : Text
+  notes : Text
+  active : Bool
+    deriving (Eq, Show)
+
+data Immunization = Immunization with
+  name : Text
+  date : Date
+  provider : Text
+    deriving (Eq, Show)
+
+data FamilyHistory = FamilyHistory with
+  relation : Text
+  condition : Text
+  notes : Text
+    deriving (Eq, Show)
+
+data AccessDuration
+  = Days30
+  | Days60
+  | Indefinite
+    deriving (Eq, Show)
+
+data LabType
+  = BloodWork
+  | XRay
+  | MRI
+  | Urinalysis
+  | CTScan
+  | Ultrasound
+    deriving (Eq, Show)
+
+data LabResult = LabResult with
+  labType : LabType
+  findings : Text
+  resultDate : Date
+    deriving (Eq, Show)
+
+-- ============================================================
+-- TEMPLATES (ordered by dependency — referenced types first)
+-- ============================================================
+
+-- Prescription created by doctor, owned by patient
+template Prescription
+  with
+    patient : Party
+    doctor : Party
+    medication : Medication
+    notes : Text
+    createdAt : Time
+  where
+    signatory patient
+    observer doctor
+
+    ensure T.length medication.name > 0
+
+-- Lab order created by doctor, owned by patient
+template LabOrder
+  with
+    patient : Party
+    doctor : Party
+    labType : LabType
+    reason : Text
+    createdAt : Time
+  where
+    signatory patient
+    observer doctor
+
+    ensure T.length reason > 0
+
+-- Doctor's view of lab results, revocable by patient
+template DoctorLabResultAccess
+  with
+    patient : Party
+    doctor : Party
+    labResult : LabResult
+  where
+    signatory patient
+    observer doctor
+
+    choice RevokeDoctorLabResultAccess
+      : ()
+      controller patient
+      do
+        return ()
+
+-- Lab results submitted by diagnostic center
+template LabResultReport
+  with
+    patient : Party
+    diagnosticCenter : Party
+    labResult : LabResult
+  where
+    signatory patient
+    observer diagnosticCenter
+
+    nonconsuming choice GrantDoctorLabResultAccess
+      : ContractId DoctorLabResultAccess
+      with
+        doctor : Party
+      controller patient
+      do
+        create DoctorLabResultAccess with
+          patient = patient
+          doctor = doctor
+          labResult = labResult
+
+-- Pharmacy access to prescription + relevant patient data
+template PharmacyAccess
+  with
+    patient : Party
+    pharmacy : Party
+    prescription : Prescription
+    allergies : [Allergy]
+    medications : [Medication]
+  where
+    signatory patient
+    observer pharmacy
+
+    choice RevokePharmacyAccess
+      : ()
+      controller patient
+      do
+        return ()
+
+    choice AcknowledgeDispensing
+      : ()
+      controller pharmacy
+      do
+        return ()
+
+-- Diagnostic center access to lab order
+template DiagnosticAccess
+  with
+    patient : Party
+    diagnosticCenter : Party
+    labOrder : LabOrder
+  where
+    signatory patient
+    observer diagnosticCenter
+
+    choice SubmitLabResults
+      : ContractId LabResultReport
+      with
+        findings : Text
+        resultDate : Date
+      controller diagnosticCenter
+      do
+        assertMsg "Findings cannot be empty" (T.length findings > 0)
+        create LabResultReport with
+          patient = patient
+          diagnosticCenter = diagnosticCenter
+          labResult = LabResult with
+            labType = labOrder.labType
+            findings = findings
+            resultDate = resultDate
+
+    choice RevokeDiagnosticAccess
+      : ()
+      controller patient
+      do
+        return ()
+
+-- Time-limited doctor access to full patient medical history
+template DoctorAccess
+  with
+    patient : Party
+    doctor : Party
+    patientInfo : PatientInfo
+    allergies : [Allergy]
+    conditions : [Condition]
+    medications : [Medication]
+    surgeries : [Surgery]
+    illnesses : [Illness]
+    diagnosticHistory : [DiagnosticRecord]
+    prescriptionHistory : [PrescriptionRecord]
+    immunizations : [Immunization]
+    familyHistory : [FamilyHistory]
+    grantedAt : Time
+    expiresAt : Optional Time
+  where
+    signatory patient
+    observer doctor
+
+    nonconsuming choice CreatePrescription
+      : ContractId Prescription
+      with
+        medication : Medication
+        notes : Text
+      controller doctor
+      do
+        now <- getTime
+        case expiresAt of
+          Some t -> assertMsg "Doctor access has expired" (now <= t)
+          None -> pure ()
+        create Prescription with
+          patient = patient
+          doctor = doctor
+          medication = medication
+          notes = notes
+          createdAt = now
+
+    nonconsuming choice CreateLabOrder
+      : ContractId LabOrder
+      with
+        labType : LabType
+        reason : Text
+      controller doctor
+      do
+        now <- getTime
+        case expiresAt of
+          Some t -> assertMsg "Doctor access has expired" (now <= t)
+          None -> pure ()
+        create LabOrder with
+          patient = patient
+          doctor = doctor
+          labType = labType
+          reason = reason
+          createdAt = now
+
+    choice RevokeDoctorAccess
+      : ()
+      controller patient
+      do
+        return ()
+
+-- Core patient health record with full medical history
+template HealthRecord
+  with
+    patient : Party
+    patientInfo : PatientInfo
+    allergies : [Allergy]
+    conditions : [Condition]
+    medications : [Medication]
+    surgeries : [Surgery]
+    illnesses : [Illness]
+    diagnosticHistory : [DiagnosticRecord]
+    prescriptionHistory : [PrescriptionRecord]
+    immunizations : [Immunization]
+    familyHistory : [FamilyHistory]
+  where
+    signatory patient
+
+    ensure T.length patientInfo.name > 0
+
+    choice UpdateRecord
+      : ContractId HealthRecord
+      with
+        newPatientInfo : PatientInfo
+        newAllergies : [Allergy]
+        newConditions : [Condition]
+        newMedications : [Medication]
+        newSurgeries : [Surgery]
+        newIllnesses : [Illness]
+        newDiagnosticHistory : [DiagnosticRecord]
+        newPrescriptionHistory : [PrescriptionRecord]
+        newImmunizations : [Immunization]
+        newFamilyHistory : [FamilyHistory]
+      controller patient
+      do
+        create this with
+          patientInfo = newPatientInfo
+          allergies = newAllergies
+          conditions = newConditions
+          medications = newMedications
+          surgeries = newSurgeries
+          illnesses = newIllnesses
+          diagnosticHistory = newDiagnosticHistory
+          prescriptionHistory = newPrescriptionHistory
+          immunizations = newImmunizations
+          familyHistory = newFamilyHistory
+
+    nonconsuming choice GrantDoctorAccess
+      : ContractId DoctorAccess
+      with
+        doctor : Party
+        duration : AccessDuration
+      controller patient
+      do
+        now <- getTime
+        let
+          expiry = case duration of
+            Days30 -> Some (addRelTime now (days 30))
+            Days60 -> Some (addRelTime now (days 60))
+            Indefinite -> None
+        create DoctorAccess with
+          patient = patient
+          doctor = doctor
+          patientInfo = patientInfo
+          allergies = allergies
+          conditions = conditions
+          medications = medications
+          surgeries = surgeries
+          illnesses = illnesses
+          diagnosticHistory = diagnosticHistory
+          prescriptionHistory = prescriptionHistory
+          immunizations = immunizations
+          familyHistory = familyHistory
+          grantedAt = now
+          expiresAt = expiry
+
+    nonconsuming choice GrantPharmacyAccess
+      : ContractId PharmacyAccess
+      with
+        pharmacy : Party
+        prescriptionCid : ContractId Prescription
+      controller patient
+      do
+        prescription <- fetch prescriptionCid
+        assertMsg "Prescription must belong to this patient" (prescription.patient == patient)
+        create PharmacyAccess with
+          patient = patient
+          pharmacy = pharmacy
+          prescription = prescription
+          allergies = allergies
+          medications = medications
+
+    nonconsuming choice GrantDiagnosticAccess
+      : ContractId DiagnosticAccess
+      with
+        diagnosticCenter : Party
+        labOrderCid : ContractId LabOrder
+      controller patient
+      do
+        labOrder <- fetch labOrderCid
+        assertMsg "Lab order must belong to this patient" (labOrder.patient == patient)
+        create DiagnosticAccess with
+          patient = patient
+          diagnosticCenter = diagnosticCenter
+          labOrder = labOrder
+
+-- ============================================================
+-- TEST SCRIPT
+-- ============================================================
+
+test_healthRecords = do
+  -- Allocate parties
+  patient <- allocateParty "Alice"
+  drSmith <- allocateParty "DrSmith"
+  drJones <- allocateParty "DrJones"
+  pharmacy <- allocateParty "PharmaCorp"
+  labCorp <- allocateParty "LabCorp"
+
+  -- Set initial time
+  setTime (time (mkDate 2025 Jan 15) 9 0 0)
+
+  -- =========================================================
+  -- 1. Patient creates their full health record
+  -- =========================================================
+  healthRecord <- submit patient do
+    createCmd HealthRecord with
+      patient = patient
+      patientInfo = PatientInfo with
+        name = "Alice Johnson"
+        dateOfBirth = mkDate 1985 Jun 12
+        bloodType = "O+"
+        emergencyContact = "Bob Johnson (spouse) - 555-0123"
+      allergies =
+        [ Allergy with name = "Penicillin"; severity = "severe"; reaction = "Anaphylaxis"
+        ]
+      conditions =
+        [ Condition with
+            name = "Hypertension"
+            diagnosedDate = mkDate 2020 Mar 1
+            status = "active"
+            notes = "Managed with medication"
+        ]
+      medications =
+        [ Medication with
+            name = "Lisinopril"
+            dosage = "10mg"
+            frequency = "daily"
+            prescribedDate = mkDate 2020 Mar 15
+            prescribedBy = "Dr. Williams"
+        ]
+      surgeries =
+        [ Surgery with
+            procedure = "Appendectomy"
+            date = mkDate 2010 Aug 20
+            surgeon = "Dr. Garcia"
+            hospital = "City General"
+            notes = "Laparoscopic, no complications"
+        ]
+      illnesses =
+        [ Illness with
+            name = "Pneumonia"
+            startDate = mkDate 2018 Dec 1
+            endDate = Some (mkDate 2018 Dec 20)
+            severity = "moderate"
+            notes = "Treated with antibiotics"
+        ]
+      diagnosticHistory =
+        [ DiagnosticRecord with
+            diagType = "Blood Panel"
+            date = mkDate 2024 Jun 15
+            facility = "LabCorp Central"
+            findings = "All values within normal range"
+            orderedBy = "Dr. Williams"
+        ]
+      prescriptionHistory =
+        [ PrescriptionRecord with
+            medication = "Amoxicillin"
+            date = mkDate 2018 Dec 5
+            doctor = "Dr. Williams"
+            notes = "For pneumonia treatment"
+            active = False
+        ]
+      immunizations =
+        [ Immunization with
+            name = "COVID-19 Pfizer"
+            date = mkDate 2021 Apr 10
+            provider = "City Pharmacy"
+        , Immunization with
+            name = "Flu Shot"
+            date = mkDate 2024 Oct 1
+            provider = "Dr. Williams"
+        ]
+      familyHistory =
+        [ FamilyHistory with
+            relation = "Father"
+            condition = "Type 2 Diabetes"
+            notes = "Diagnosed at age 55"
+        , FamilyHistory with
+            relation = "Mother"
+            condition = "Breast Cancer"
+            notes = "Diagnosed at age 60, in remission"
+        ]
+
+  -- =========================================================
+  -- 2. Patient updates record (adds new allergy and surgery)
+  -- =========================================================
+  healthRecord <- submit patient do
+    exerciseCmd healthRecord UpdateRecord with
+      newPatientInfo = PatientInfo with
+        name = "Alice Johnson"
+        dateOfBirth = mkDate 1985 Jun 12
+        bloodType = "O+"
+        emergencyContact = "Bob Johnson (spouse) - 555-0123"
+      newAllergies =
+        [ Allergy with name = "Penicillin"; severity = "severe"; reaction = "Anaphylaxis"
+        , Allergy with name = "Sulfa"; severity = "moderate"; reaction = "Skin rash"
+        ]
+      newConditions =
+        [ Condition with
+            name = "Hypertension"
+            diagnosedDate = mkDate 2020 Mar 1
+            status = "active"
+            notes = "Managed with medication"
+        ]
+      newMedications =
+        [ Medication with
+            name = "Lisinopril"
+            dosage = "10mg"
+            frequency = "daily"
+            prescribedDate = mkDate 2020 Mar 15
+            prescribedBy = "Dr. Williams"
+        ]
+      newSurgeries =
+        [ Surgery with
+            procedure = "Appendectomy"
+            date = mkDate 2010 Aug 20
+            surgeon = "Dr. Garcia"
+            hospital = "City General"
+            notes = "Laparoscopic, no complications"
+        , Surgery with
+            procedure = "Knee Arthroscopy"
+            date = mkDate 2023 Feb 10
+            surgeon = "Dr. Patel"
+            hospital = "Orthopedic Center"
+            notes = "Meniscus repair, right knee"
+        ]
+      newIllnesses =
+        [ Illness with
+            name = "Pneumonia"
+            startDate = mkDate 2018 Dec 1
+            endDate = Some (mkDate 2018 Dec 20)
+            severity = "moderate"
+            notes = "Treated with antibiotics"
+        ]
+      newDiagnosticHistory =
+        [ DiagnosticRecord with
+            diagType = "Blood Panel"
+            date = mkDate 2024 Jun 15
+            facility = "LabCorp Central"
+            findings = "All values within normal range"
+            orderedBy = "Dr. Williams"
+        ]
+      newPrescriptionHistory =
+        [ PrescriptionRecord with
+            medication = "Amoxicillin"
+            date = mkDate 2018 Dec 5
+            doctor = "Dr. Williams"
+            notes = "For pneumonia treatment"
+            active = False
+        ]
+      newImmunizations =
+        [ Immunization with
+            name = "COVID-19 Pfizer"
+            date = mkDate 2021 Apr 10
+            provider = "City Pharmacy"
+        , Immunization with
+            name = "Flu Shot"
+            date = mkDate 2024 Oct 1
+            provider = "Dr. Williams"
+        ]
+      newFamilyHistory =
+        [ FamilyHistory with
+            relation = "Father"
+            condition = "Type 2 Diabetes"
+            notes = "Diagnosed at age 55"
+        , FamilyHistory with
+            relation = "Mother"
+            condition = "Breast Cancer"
+            notes = "Diagnosed at age 60, in remission"
+        ]
+
+  -- =========================================================
+  -- 3. Doctor cannot grant themselves access
+  -- =========================================================
+  submitMustFail drSmith do
+    exerciseCmd healthRecord GrantDoctorAccess with
+      doctor = drSmith
+      duration = Days30
+
+  -- =========================================================
+  -- 4. Patient grants DrSmith 30-day access
+  -- =========================================================
+  doctorAccess <- submit patient do
+    exerciseCmd healthRecord GrantDoctorAccess with
+      doctor = drSmith
+      duration = Days30
+
+  -- =========================================================
+  -- 5. Doctor creates a prescription
+  -- =========================================================
+  prescription <- submit drSmith do
+    exerciseCmd doctorAccess CreatePrescription with
+      medication = Medication with
+        name = "Amoxicillin"
+        dosage = "500mg"
+        frequency = "3x daily"
+        prescribedDate = mkDate 2025 Jan 15
+        prescribedBy = "DrSmith"
+      notes = "For bacterial infection. Avoid penicillin due to allergy."
+
+  -- =========================================================
+  -- 6. Doctor creates a lab order
+  -- =========================================================
+  labOrder <- submit drSmith do
+    exerciseCmd doctorAccess CreateLabOrder with
+      labType = BloodWork
+      reason = "Routine blood panel for hypertension monitoring"
+
+  -- =========================================================
+  -- 7. Empty-reason lab order should fail
+  -- =========================================================
+  submitMustFail drSmith do
+    exerciseCmd doctorAccess CreateLabOrder with
+      labType = XRay
+      reason = ""
+
+  -- =========================================================
+  -- 8. Patient grants pharmacy access to prescription
+  -- =========================================================
+  pharmacyAccess <- submit patient do
+    exerciseCmd healthRecord GrantPharmacyAccess with
+      pharmacy = pharmacy
+      prescriptionCid = prescription
+
+  -- =========================================================
+  -- 9. Pharmacy acknowledges dispensing
+  -- =========================================================
+  submit pharmacy do
+    exerciseCmd pharmacyAccess AcknowledgeDispensing
+
+  -- =========================================================
+  -- 10. Patient grants diagnostic center access to lab order
+  -- =========================================================
+  diagnosticAccess <- submit patient do
+    exerciseCmd healthRecord GrantDiagnosticAccess with
+      diagnosticCenter = labCorp
+      labOrderCid = labOrder
+
+  -- =========================================================
+  -- 11. Diagnostic center submits lab results
+  -- =========================================================
+  labReport <- submit labCorp do
+    exerciseCmd diagnosticAccess SubmitLabResults with
+      findings = "CBC normal. Cholesterol slightly elevated at 210."
+      resultDate = mkDate 2025 Jan 20
+
+  -- =========================================================
+  -- 12. Empty findings should fail
+  -- =========================================================
+  diagnosticAccess2 <- submit patient do
+    exerciseCmd healthRecord GrantDiagnosticAccess with
+      diagnosticCenter = labCorp
+      labOrderCid = labOrder
+
+  submitMustFail labCorp do
+    exerciseCmd diagnosticAccess2 SubmitLabResults with
+      findings = ""
+      resultDate = mkDate 2025 Jan 20
+
+  -- =========================================================
+  -- 13. Patient shares lab results with doctor
+  -- =========================================================
+  doctorLabAccess <- submit patient do
+    exerciseCmd labReport GrantDoctorLabResultAccess with
+      doctor = drSmith
+
+  -- =========================================================
+  -- 14. Patient revokes doctor's lab result access
+  -- =========================================================
+  submit patient do
+    exerciseCmd doctorLabAccess RevokeDoctorLabResultAccess
+
+  -- =========================================================
+  -- 15. 30-day access expires after 31 days
+  -- =========================================================
+  doctorAccess2 <- submit patient do
+    exerciseCmd healthRecord GrantDoctorAccess with
+      doctor = drJones
+      duration = Days30
+
+  passTime (days 31)
+
+  submitMustFail drJones do
+    exerciseCmd doctorAccess2 CreatePrescription with
+      medication = Medication with
+        name = "Metformin"
+        dosage = "500mg"
+        frequency = "daily"
+        prescribedDate = mkDate 2025 Feb 15
+        prescribedBy = "DrJones"
+      notes = "For blood sugar management"
+
+  -- =========================================================
+  -- 16. Indefinite access still works after 365+ days
+  -- =========================================================
+  doctorAccess3 <- submit patient do
+    exerciseCmd healthRecord GrantDoctorAccess with
+      doctor = drSmith
+      duration = Indefinite
+
+  passTime (days 365)
+
+  submit drSmith do
+    exerciseCmd doctorAccess3 CreatePrescription with
+      medication = Medication with
+        name = "Atorvastatin"
+        dosage = "20mg"
+        frequency = "daily"
+        prescribedDate = mkDate 2026 Feb 15
+        prescribedBy = "DrSmith"
+      notes = "For elevated cholesterol per lab results"
+
+  -- =========================================================
+  -- 17. Patient revokes doctor access; further actions fail
+  -- =========================================================
+  doctorAccess4 <- submit patient do
+    exerciseCmd healthRecord GrantDoctorAccess with
+      doctor = drJones
+      duration = Indefinite
+
+  submit patient do
+    exerciseCmd doctorAccess4 RevokeDoctorAccess
+
+  submitMustFail drJones do
+    exerciseCmd doctorAccess4 CreatePrescription with
+      medication = Medication with
+        name = "Test"
+        dosage = "1mg"
+        frequency = "daily"
+        prescribedDate = mkDate 2026 Feb 15
+        prescribedBy = "DrJones"
+      notes = "Should fail - access revoked"
+
+  return ()
