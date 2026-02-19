@@ -1,0 +1,18 @@
+module Prescription where
+
+import Types
+import DA.Text as T
+
+-- Prescription created by doctor, owned by patient
+template Prescription
+  with
+    patient : Party
+    doctor : Party
+    medication : Medication
+    notes : Text
+    createdAt : Time
+  where
+    signatory patient
+    observer doctor
+
+    ensure T.length medication.name > 0

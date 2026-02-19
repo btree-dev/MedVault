@@ -1,0 +1,28 @@
+module PharmacyAccess where
+
+import Types
+import Prescription
+
+-- Pharmacy access to prescription + relevant patient data
+template PharmacyAccess
+  with
+    patient : Party
+    pharmacy : Party
+    prescription : Prescription
+    allergies : [Allergy]
+    medications : [Medication]
+  where
+    signatory patient
+    observer pharmacy
+
+    choice RevokePharmacyAccess
+      : ()
+      controller patient
+      do
+        return ()
+
+    choice AcknowledgeDispensing
+      : ()
+      controller pharmacy
+      do
+        return ()

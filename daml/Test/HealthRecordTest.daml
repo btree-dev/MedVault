@@ -1,0 +1,182 @@
+module Test.HealthRecordTest where
+
+import Types
+import HealthRecord
+import DA.Date hiding (date)
+import DA.Time
+import Daml.Script
+
+-- Test 1: Patient creates their full health record
+-- Test 2: Patient updates record (adds new allergy and surgery)
+test_healthRecordCreationAndUpdate = do
+  patient <- allocateParty "Alice"
+
+  setTime (time (mkDate 2025 Jan 15) 9 0 0)
+
+  -- 1. Patient creates their full health record
+  healthRecord <- submit patient do
+    createCmd HealthRecord with
+      patient = patient
+      patientInfo = PatientInfo with
+        name = "Alice Johnson"
+        dateOfBirth = mkDate 1985 Jun 12
+        bloodType = "O+"
+        emergencyContact = "Bob Johnson (spouse) - 555-0123"
+      allergies =
+        [ Allergy with name = "Penicillin"; severity = "severe"; reaction = "Anaphylaxis"
+        ]
+      conditions =
+        [ Condition with
+            name = "Hypertension"
+            diagnosedDate = mkDate 2020 Mar 1
+            status = "active"
+            notes = "Managed with medication"
+        ]
+      medications =
+        [ Medication with
+            name = "Lisinopril"
+            dosage = "10mg"
+            frequency = "daily"
+            prescribedDate = mkDate 2020 Mar 15
+            prescribedBy = "Dr. Williams"
+        ]
+      surgeries =
+        [ Surgery with
+            procedure = "Appendectomy"
+            date = mkDate 2010 Aug 20
+            surgeon = "Dr. Garcia"
+            hospital = "City General"
+            notes = "Laparoscopic, no complications"
+        ]
+      illnesses =
+        [ Illness with
+            name = "Pneumonia"
+            startDate = mkDate 2018 Dec 1
+            endDate = Some (mkDate 2018 Dec 20)
+            severity = "moderate"
+            notes = "Treated with antibiotics"
+        ]
+      diagnosticHistory =
+        [ DiagnosticRecord with
+            diagType = "Blood Panel"
+            date = mkDate 2024 Jun 15
+            facility = "LabCorp Central"
+            findings = "All values within normal range"
+            orderedBy = "Dr. Williams"
+        ]
+      prescriptionHistory =
+        [ PrescriptionRecord with
+            medication = "Amoxicillin"
+            date = mkDate 2018 Dec 5
+            doctor = "Dr. Williams"
+            notes = "For pneumonia treatment"
+            active = False
+        ]
+      immunizations =
+        [ Immunization with
+            name = "COVID-19 Pfizer"
+            date = mkDate 2021 Apr 10
+            provider = "City Pharmacy"
+        , Immunization with
+            name = "Flu Shot"
+            date = mkDate 2024 Oct 1
+            provider = "Dr. Williams"
+        ]
+      familyHistory =
+        [ FamilyHistory with
+            relation = "Father"
+            condition = "Type 2 Diabetes"
+            notes = "Diagnosed at age 55"
+        , FamilyHistory with
+            relation = "Mother"
+            condition = "Breast Cancer"
+            notes = "Diagnosed at age 60, in remission"
+        ]
+
+  -- 2. Patient updates record (adds new allergy and surgery)
+  _healthRecord <- submit patient do
+    exerciseCmd healthRecord UpdateRecord with
+      newPatientInfo = PatientInfo with
+        name = "Alice Johnson"
+        dateOfBirth = mkDate 1985 Jun 12
+        bloodType = "O+"
+        emergencyContact = "Bob Johnson (spouse) - 555-0123"
+      newAllergies =
+        [ Allergy with name = "Penicillin"; severity = "severe"; reaction = "Anaphylaxis"
+        , Allergy with name = "Sulfa"; severity = "moderate"; reaction = "Skin rash"
+        ]
+      newConditions =
+        [ Condition with
+            name = "Hypertension"
+            diagnosedDate = mkDate 2020 Mar 1
+            status = "active"
+            notes = "Managed with medication"
+        ]
+      newMedications =
+        [ Medication with
+            name = "Lisinopril"
+            dosage = "10mg"
+            frequency = "daily"
+            prescribedDate = mkDate 2020 Mar 15
+            prescribedBy = "Dr. Williams"
+        ]
+      newSurgeries =
+        [ Surgery with
+            procedure = "Appendectomy"
+            date = mkDate 2010 Aug 20
+            surgeon = "Dr. Garcia"
+            hospital = "City General"
+            notes = "Laparoscopic, no complications"
+        , Surgery with
+            procedure = "Knee Arthroscopy"
+            date = mkDate 2023 Feb 10
+            surgeon = "Dr. Patel"
+            hospital = "Orthopedic Center"
+            notes = "Meniscus repair, right knee"
+        ]
+      newIllnesses =
+        [ Illness with
+            name = "Pneumonia"
+            startDate = mkDate 2018 Dec 1
+            endDate = Some (mkDate 2018 Dec 20)
+            severity = "moderate"
+            notes = "Treated with antibiotics"
+        ]
+      newDiagnosticHistory =
+        [ DiagnosticRecord with
+            diagType = "Blood Panel"
+            date = mkDate 2024 Jun 15
+            facility = "LabCorp Central"
+            findings = "All values within normal range"
+            orderedBy = "Dr. Williams"
+        ]
+      newPrescriptionHistory =
+        [ PrescriptionRecord with
+            medication = "Amoxicillin"
+            date = mkDate 2018 Dec 5
+            doctor = "Dr. Williams"
+            notes = "For pneumonia treatment"
+            active = False
+        ]
+      newImmunizations =
+        [ Immunization with
+            name = "COVID-19 Pfizer"
+            date = mkDate 2021 Apr 10
+            provider = "City Pharmacy"
+        , Immunization with
+            name = "Flu Shot"
+            date = mkDate 2024 Oct 1
+            provider = "Dr. Williams"
+        ]
+      newFamilyHistory =
+        [ FamilyHistory with
+            relation = "Father"
+            condition = "Type 2 Diabetes"
+            notes = "Diagnosed at age 55"
+        , FamilyHistory with
+            relation = "Mother"
+            condition = "Breast Cancer"
+            notes = "Diagnosed at age 60, in remission"
+        ]
+
+  return ()

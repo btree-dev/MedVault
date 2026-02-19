@@ -1,0 +1,72 @@
+module Test.PharmacyAccessTest where
+
+import Types
+import HealthRecord
+import PharmacyAccess
+import DA.Date hiding (date)
+import DA.Time
+import DoctorAccess
+import Daml.Script
+
+-- Test 8 & 9: Pharmacy access grant and dispensing acknowledgment
+test_pharmacyAccessAndDispensing = do
+  patient <- allocateParty "Alice"
+  drSmith <- allocateParty "DrSmith"
+  pharmacy <- allocateParty "PharmaCorp"
+
+  setTime (time (mkDate 2025 Jan 15) 9 0 0)
+
+  healthRecord <- submit patient do
+    createCmd HealthRecord with
+      patient = patient
+      patientInfo = PatientInfo with
+        name = "Alice Johnson"
+        dateOfBirth = mkDate 1985 Jun 12
+        bloodType = "O+"
+        emergencyContact = "Bob Johnson (spouse) - 555-0123"
+      allergies =
+        [ Allergy with name = "Penicillin"; severity = "severe"; reaction = "Anaphylaxis"
+        ]
+      conditions = []
+      medications =
+        [ Medication with
+            name = "Lisinopril"
+            dosage = "10mg"
+            frequency = "daily"
+            prescribedDate = mkDate 2020 Mar 15
+            prescribedBy = "Dr. Williams"
+        ]
+      surgeries = []
+      illnesses = []
+      diagnosticHistory = []
+      prescriptionHistory = []
+      immunizations = []
+      familyHistory = []
+
+  -- Grant doctor access and create prescription
+  doctorAccess <- submit patient do
+    exerciseCmd healthRecord GrantDoctorAccess with
+      doctor = drSmith
+      duration = Days30
+
+  prescription <- submit drSmith do
+    exerciseCmd doctorAccess CreatePrescription with
+      medication = Medication with
+        name = "Amoxicillin"
+        dosage = "500mg"
+        frequency = "3x daily"
+        prescribedDate = mkDate 2025 Jan 15
+        prescribedBy = "DrSmith"
+      notes = "For bacterial infection."
+
+  -- 8. Patient grants pharmacy access to prescription
+  pharmacyAccess <- submit patient do
+    exerciseCmd healthRecord GrantPharmacyAccess with
+      pharmacy = pharmacy
+      prescriptionCid = prescription
+
+  -- 9. Pharmacy acknowledges dispensing
+  submit pharmacy do
+    exerciseCmd pharmacyAccess AcknowledgeDispensing
+
+  return ()

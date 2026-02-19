@@ -1,0 +1,55 @@
+module Operator where
+
+import Types
+import HealthRecord
+
+-- Operator manages the system and onboards patients
+template Operator
+  with
+    operator : Party
+  where
+    signatory operator
+
+    nonconsuming choice InvitePatient
+      : ContractId PatientInvite
+      with
+        patient : Party
+      controller operator
+      do
+        create PatientInvite with
+          operator = operator
+          patient = patient
+
+-- Invitation for a patient to join the system
+template PatientInvite
+  with
+    operator : Party
+    patient : Party
+  where
+    signatory operator
+    observer patient
+
+    choice AcceptInvite
+      : ContractId HealthRecord
+      with
+        patientInfo : PatientInfo
+      controller patient
+      do
+        create HealthRecord with
+          patient = patient
+          patientInfo = patientInfo
+          allergies = []
+          conditions = []
+          medications = []
+          surgeries = []
+          illnesses = []
+          diagnosticHistory = []
+          prescriptionHistory = []
+          immunizations = []
+          familyHistory = []
+
+    choice RejectInvite
+      : ()
+      controller patient
+      do
+        return ()

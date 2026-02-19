@@ -1,0 +1,40 @@
+module LabResults where
+
+import Types
+
+-- Doctor's view of lab results, revocable by patient
+template DoctorLabResultAccess
+  with
+    patient : Party
+    doctor : Party
+    labResult : LabResult
+  where
+    signatory patient
+    observer doctor
+
+    choice RevokeDoctorLabResultAccess
+      : ()
+      controller patient
+      do
+        return ()
+
+-- Lab results submitted by diagnostic center
+template LabResultReport
+  with
+    patient : Party
+    diagnosticCenter : Party
+    labResult : LabResult
+  where
+    signatory patient
+    observer diagnosticCenter
+
+    nonconsuming choice GrantDoctorLabResultAccess
+      : ContractId DoctorLabResultAccess
+      with
+        doctor : Party
+      controller patient
+      do
+        create DoctorLabResultAccess with
+          patient = patient
+          doctor = doctor
+          labResult = labResult

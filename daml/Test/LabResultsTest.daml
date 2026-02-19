@@ -1,0 +1,68 @@
+module Test.LabResultsTest where
+
+import Types
+import HealthRecord
+import LabResults
+import DiagnosticAccess
+import DA.Date hiding (date)
+import DA.Time
+import DoctorAccess
+import Daml.Script
+
+-- Test 13 & 14: Lab result sharing and revocation
+test_labResultSharingAndRevocation = do
+  patient <- allocateParty "Alice"
+  drSmith <- allocateParty "DrSmith"
+  labCorp <- allocateParty "LabCorp"
+
+  setTime (time (mkDate 2025 Jan 15) 9 0 0)
+
+  healthRecord <- submit patient do
+    createCmd HealthRecord with
+      patient = patient
+      patientInfo = PatientInfo with
+        name = "Alice Johnson"
+        dateOfBirth = mkDate 1985 Jun 12
+        bloodType = "O+"
+        emergencyContact = "Bob Johnson (spouse) - 555-0123"
+      allergies = []
+      conditions = []
+      medications = []
+      surgeries = []
+      illnesses = []
+      diagnosticHistory = []
+      prescriptionHistory = []
+      immunizations = []
+      familyHistory = []
+
+  -- Setup: create lab order, diagnostic access, and lab results
+  doctorAccess <- submit patient do
+    exerciseCmd healthRecord GrantDoctorAccess with
+      doctor = drSmith
+      duration = Days30
+
+  labOrder <- submit drSmith do
+    exerciseCmd doctorAccess CreateLabOrder with
+      labType = BloodWork
+      reason = "Routine blood panel"
+
+  diagnosticAccess <- submit patient do
+    exerciseCmd healthRecord GrantDiagnosticAccess with
+      diagnosticCenter = labCorp
+      labOrderCid = labOrder
+
+  labReport <- submit labCorp do
+    exerciseCmd diagnosticAccess SubmitLabResults with
+      findings = "CBC normal. Cholesterol slightly elevated at 210."
+      resultDate = mkDate 2025 Jan 20
+
+  -- 13. Patient shares lab results with doctor
+  doctorLabAccess <- submit patient do
+    exerciseCmd labReport GrantDoctorLabResultAccess with
+      doctor = drSmith
+
+  -- 14. Patient revokes doctor's lab result access
+  submit patient do
+    exerciseCmd doctorLabAccess RevokeDoctorLabResultAccess
+
+  return ()

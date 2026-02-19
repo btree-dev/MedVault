@@ -1,2 +1,8 @@
 /.daml
 /log
+
+# Frontend
+frontend/node_modules/
+frontend/build/
+frontend/src/@daml.js/
+frontend/.pnp.*

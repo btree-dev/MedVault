@@ -1,0 +1,18 @@
+module LabOrder where
+
+import Types
+import DA.Text as T
+
+-- Lab order created by doctor, owned by patient
+template LabOrder
+  with
+    patient : Party
+    doctor : Party
+    labType : LabType
+    reason : Text
+    createdAt : Time
+  where
+    signatory patient
+    observer doctor
+
+    ensure T.length reason > 0

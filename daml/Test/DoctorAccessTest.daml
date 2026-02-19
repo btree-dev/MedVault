@@ -1,0 +1,226 @@
+module Test.DoctorAccessTest where
+
+import Types
+import HealthRecord
+import DoctorAccess
+import DA.Date hiding (date)
+import DA.Time
+import Daml.Script
+
+-- Helper to create a standard test health record
+setupHealthRecord : Script (Party, Party, Party, ContractId HealthRecord)
+setupHealthRecord = do
+  patient <- allocateParty "Alice"
+  drSmith <- allocateParty "DrSmith"
+  drJones <- allocateParty "DrJones"
+
+  setTime (time (mkDate 2025 Jan 15) 9 0 0)
+
+  healthRecord <- submit patient do
+    createCmd HealthRecord with
+      patient = patient
+      patientInfo = PatientInfo with
+        name = "Alice Johnson"
+        dateOfBirth = mkDate 1985 Jun 12
+        bloodType = "O+"
+        emergencyContact = "Bob Johnson (spouse) - 555-0123"
+      allergies =
+        [ Allergy with name = "Penicillin"; severity = "severe"; reaction = "Anaphylaxis"
+        , Allergy with name = "Sulfa"; severity = "moderate"; reaction = "Skin rash"
+        ]
+      conditions =
+        [ Condition with
+            name = "Hypertension"
+            diagnosedDate = mkDate 2020 Mar 1
+            status = "active"
+            notes = "Managed with medication"
+        ]
+      medications =
+        [ Medication with
+            name = "Lisinopril"
+            dosage = "10mg"
+            frequency = "daily"
+            prescribedDate = mkDate 2020 Mar 15
+            prescribedBy = "Dr. Williams"
+        ]
+      surgeries =
+        [ Surgery with
+            procedure = "Appendectomy"
+            date = mkDate 2010 Aug 20
+            surgeon = "Dr. Garcia"
+            hospital = "City General"
+            notes = "Laparoscopic, no complications"
+        ]
+      illnesses =
+        [ Illness with
+            name = "Pneumonia"
+            startDate = mkDate 2018 Dec 1
+            endDate = Some (mkDate 2018 Dec 20)
+            severity = "moderate"
+            notes = "Treated with antibiotics"
+        ]
+      diagnosticHistory =
+        [ DiagnosticRecord with
+            diagType = "Blood Panel"
+            date = mkDate 2024 Jun 15
+            facility = "LabCorp Central"
+            findings = "All values within normal range"
+            orderedBy = "Dr. Williams"
+        ]
+      prescriptionHistory =
+        [ PrescriptionRecord with
+            medication = "Amoxicillin"
+            date = mkDate 2018 Dec 5
+            doctor = "Dr. Williams"
+            notes = "For pneumonia treatment"
+            active = False
+        ]
+      immunizations =
+        [ Immunization with
+            name = "COVID-19 Pfizer"
+            date = mkDate 2021 Apr 10
+            provider = "City Pharmacy"
+        , Immunization with
+            name = "Flu Shot"
+            date = mkDate 2024 Oct 1
+            provider = "Dr. Williams"
+        ]
+      familyHistory =
+        [ FamilyHistory with
+            relation = "Father"
+            condition = "Type 2 Diabetes"
+            notes = "Diagnosed at age 55"
+        , FamilyHistory with
+            relation = "Mother"
+            condition = "Breast Cancer"
+            notes = "Diagnosed at age 60, in remission"
+        ]
+
+  return (patient, drSmith, drJones, healthRecord)
+
+-- Test 3: Doctor cannot grant themselves access
+test_doctorCannotSelfGrant = do
+  (patient, drSmith, _drJones, healthRecord) <- setupHealthRecord
+
+  submitMustFail drSmith do
+    exerciseCmd healthRecord GrantDoctorAccess with
+      doctor = drSmith
+      duration = Days30
+
+  return ()
+
+-- Test 4 & 5: Patient grants DrSmith 30-day access; Doctor creates prescription
+test_doctorAccessAndPrescription = do
+  (patient, drSmith, _drJones, healthRecord) <- setupHealthRecord
+
+  -- 4. Patient grants DrSmith 30-day access
+  doctorAccess <- submit patient do
+    exerciseCmd healthRecord GrantDoctorAccess with
+      doctor = drSmith
+      duration = Days30
+
+  -- 5. Doctor creates a prescription
+  _prescription <- submit drSmith do
+    exerciseCmd doctorAccess CreatePrescription with
+      medication = Medication with
+        name = "Amoxicillin"
+        dosage = "500mg"
+        frequency = "3x daily"
+        prescribedDate = mkDate 2025 Jan 15
+        prescribedBy = "DrSmith"
+      notes = "For bacterial infection. Avoid penicillin due to allergy."
+
+  return ()
+
+-- Test 6 & 7: Doctor creates lab order; Empty-reason lab order fails
+test_doctorLabOrders = do
+  (patient, drSmith, _drJones, healthRecord) <- setupHealthRecord
+
+  doctorAccess <- submit patient do
+    exerciseCmd healthRecord GrantDoctorAccess with
+      doctor = drSmith
+      duration = Days30
+
+  -- 6. Doctor creates a lab order
+  _labOrder <- submit drSmith do
+    exerciseCmd doctorAccess CreateLabOrder with
+      labType = BloodWork
+      reason = "Routine blood panel for hypertension monitoring"
+
+  -- 7. Empty-reason lab order should fail
+  submitMustFail drSmith do
+    exerciseCmd doctorAccess CreateLabOrder with
+      labType = XRay
+      reason = ""
+
+  return ()
+
+-- Test 15: 30-day access expires after 31 days
+test_accessExpiry = do
+  (patient, _drSmith, drJones, healthRecord) <- setupHealthRecord
+
+  doctorAccess <- submit patient do
+    exerciseCmd healthRecord GrantDoctorAccess with
+      doctor = drJones
+      duration = Days30
+
+  passTime (days 31)
+
+  submitMustFail drJones do
+    exerciseCmd doctorAccess CreatePrescription with
+      medication = Medication with
+        name = "Metformin"
+        dosage = "500mg"
+        frequency = "daily"
+        prescribedDate = mkDate 2025 Feb 15
+        prescribedBy = "DrJones"
+      notes = "For blood sugar management"
+
+  return ()
+
+-- Test 16: Indefinite access still works after 365+ days
+test_indefiniteAccess = do
+  (patient, drSmith, _drJones, healthRecord) <- setupHealthRecord
+
+  doctorAccess <- submit patient do
+    exerciseCmd healthRecord GrantDoctorAccess with
+      doctor = drSmith
+      duration = Indefinite
+
+  passTime (days 365)
+
+  _prescription <- submit drSmith do
+    exerciseCmd doctorAccess CreatePrescription with
+      medication = Medication with
+        name = "Atorvastatin"
+        dosage = "20mg"
+        frequency = "daily"
+        prescribedDate = mkDate 2026 Feb 15
+        prescribedBy = "DrSmith"
+      notes = "For elevated cholesterol per lab results"
+
+  return ()
+
+-- Test 17: Patient revokes doctor access; further actions fail
+test_revokeAccess = do
+  (patient, _drSmith, drJones, healthRecord) <- setupHealthRecord
+
+  doctorAccess <- submit patient do
+    exerciseCmd healthRecord GrantDoctorAccess with
+      doctor = drJones
+      duration = Indefinite
+
+  submit patient do
+    exerciseCmd doctorAccess RevokeDoctorAccess
+
+  submitMustFail drJones do
+    exerciseCmd doctorAccess CreatePrescription with
+      medication = Medication with
+        name = "Test"
+        dosage = "1mg"
+        frequency = "daily"
+        prescribedDate = mkDate 2026 Feb 15
+        prescribedBy = "DrJones"
+      notes = "Should fail - access revoked"
+
+  return ()

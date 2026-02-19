@@ -1,0 +1,79 @@
+module Test.OnboardingTest where
+
+import Types
+import Operator
+import DA.Date hiding (date)
+import DA.Time
+import Daml.Script
+
+-- Test: Operator invites patient, patient accepts
+test_operatorInviteAccept = do
+  operator <- allocateParty "Operator"
+  patient <- allocateParty "Alice"
+
+  setTime (time (mkDate 2025 Jan 15) 9 0 0)
+
+  -- Operator sets up
+  operatorContract <- submit operator do
+    createCmd Operator with
+      operator = operator
+
+  -- Operator invites patient
+  invite <- submit operator do
+    exerciseCmd operatorContract InvitePatient with
+      patient = patient
+
+  -- Patient accepts and creates health record
+  _healthRecord <- submit patient do
+    exerciseCmd invite AcceptInvite with
+      patientInfo = PatientInfo with
+        name = "Alice Johnson"
+        dateOfBirth = mkDate 1985 Jun 12
+        bloodType = "O+"
+        emergencyContact = "Bob Johnson (spouse) - 555-0123"
+
+  return ()
+
+-- Test: Operator invites patient, patient rejects
+test_operatorInviteReject = do
+  operator <- allocateParty "Operator"
+  patient <- allocateParty "Bob"
+
+  operatorContract <- submit operator do
+    createCmd Operator with
+      operator = operator
+
+  invite <- submit operator do
+    exerciseCmd operatorContract InvitePatient with
+      patient = patient
+
+  -- Patient rejects the invite
+  submit patient do
+    exerciseCmd invite RejectInvite
+
+  return ()
+
+-- Test: Unauthorized party cannot accept invite
+test_unauthorizedCannotAccept = do
+  operator <- allocateParty "Operator"
+  patient <- allocateParty "Alice"
+  unauthorized <- allocateParty "Mallory"
+
+  operatorContract <- submit operator do
+    createCmd Operator with
+      operator = operator
+
+  invite <- submit operator do
+    exerciseCmd operatorContract InvitePatient with
+      patient = patient
+
+  -- Unauthorized party cannot accept
+  submitMustFail unauthorized do
+    exerciseCmd invite AcceptInvite with
+      patientInfo = PatientInfo with
+        name = "Mallory"
+        dateOfBirth = mkDate 1990 Jan 1
+        bloodType = "A+"
+        emergencyContact = "None"
+
+  return ()

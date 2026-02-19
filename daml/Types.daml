@@ -1,0 +1,106 @@
+{-# LANGUAGE ApplicativeDo #-}
+module Types where
+
+import DA.Date hiding (date)
+import DA.Date qualified as Date (date)
+
+-- Helper to avoid ambiguity with record field names
+mkDate : Int -> Month -> Int -> Date
+mkDate = Date.date
+
+-- ============================================================
+-- DATA TYPES
+-- ============================================================
+
+data PatientInfo = PatientInfo with
+  name : Text
+  dateOfBirth : Date
+  bloodType : Text
+  emergencyContact : Text
+    deriving (Eq, Show)
+
+data Allergy = Allergy with
+  name : Text
+  severity : Text         -- "mild", "moderate", "severe"
+  reaction : Text
+    deriving (Eq, Show)
+
+data Condition = Condition with
+  name : Text
+  diagnosedDate : Date
+  status : Text           -- "active", "resolved"
+  notes : Text
+    deriving (Eq, Show)
+
+data Medication = Medication with
+  name : Text
+  dosage : Text
+  frequency : Text
+  prescribedDate : Date
+  prescribedBy : Text
+    deriving (Eq, Show)
+
+data Surgery = Surgery with
+  procedure : Text
+  date : Date
+  surgeon : Text
+  hospital : Text
+  notes : Text
+    deriving (Eq, Show)
+
+data Illness = Illness with
+  name : Text
+  startDate : Date
+  endDate : Optional Date
+  severity : Text
+  notes : Text
+    deriving (Eq, Show)
+
+data DiagnosticRecord = DiagnosticRecord with
+  diagType : Text
+  date : Date
+  facility : Text
+  findings : Text
+  orderedBy : Text
+    deriving (Eq, Show)
+
+data PrescriptionRecord = PrescriptionRecord with
+  medication : Text
+  date : Date
+  doctor : Text
+  notes : Text
+  active : Bool
+    deriving (Eq, Show)
+
+data Immunization = Immunization with
+  name : Text
+  date : Date
+  provider : Text
+    deriving (Eq, Show)
+
+data FamilyHistory = FamilyHistory with
+  relation : Text
+  condition : Text
+  notes : Text
+    deriving (Eq, Show)
+
+data AccessDuration
+  = Days30
+  | Days60
+  | Indefinite
+    deriving (Eq, Show)
+
+data LabType
+  = BloodWork
+  | XRay
+  | MRI
+  | Urinalysis
+  | CTScan
+  | Ultrasound
+    deriving (Eq, Show)
+
+data LabResult = LabResult with
+  labType : LabType
+  findings : Text
+  resultDate : Date
+    deriving (Eq, Show)

@@ -1,0 +1,60 @@
+module Test.AuditTest where
+
+import Audit
+import Types
+import DA.Date hiding (date)
+import DA.Time
+import Daml.Script
+
+-- Test: Operator creates audit observer and logs events
+test_auditEventLogging = do
+  operator <- allocateParty "Operator"
+  auditor <- allocateParty "Auditor"
+
+  setTime (time (mkDate 2025 Jan 15) 9 0 0)
+  now <- getTime
+
+  -- Create audit observer
+  auditObserver <- submit operator do
+    createCmd AuditObserver with
+      operator = operator
+      auditor = auditor
+
+  -- Log an event
+  _event <- submit operator do
+    exerciseCmd auditObserver LogEvent with
+      eventType = "PATIENT_ONBOARDED"
+      description = "Patient Alice Johnson onboarded to the system"
+      timestamp = now
+
+  -- Log another event
+  _event2 <- submit operator do
+    exerciseCmd auditObserver LogEvent with
+      eventType = "ACCESS_GRANTED"
+      description = "Doctor DrSmith granted 30-day access to Alice's records"
+      timestamp = now
+
+  return ()
+
+-- Test: Non-operator cannot log events
+test_unauthorizedCannotLogEvents = do
+  operator <- allocateParty "Operator"
+  auditor <- allocateParty "Auditor"
+  unauthorized <- allocateParty "Mallory"
+
+  setTime (time (mkDate 2025 Jan 15) 9 0 0)
+  now <- getTime
+
+  auditObserver <- submit operator do
+    createCmd AuditObserver with
+      operator = operator
+      auditor = auditor
+
+  -- Unauthorized party cannot log events
+  submitMustFail unauthorized do
+    exerciseCmd auditObserver LogEvent with
+      eventType = "FAKE_EVENT"
+      description = "This should not work"
+      timestamp = now
+
+  return ()

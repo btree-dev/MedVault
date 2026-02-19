@@ -1,0 +1,68 @@
+module DoctorAccess where
+
+import Types
+import Prescription
+import LabOrder
+
+-- Time-limited doctor access to full patient medical history
+template DoctorAccess
+  with
+    patient : Party
+    doctor : Party
+    patientInfo : PatientInfo
+    allergies : [Allergy]
+    conditions : [Condition]
+    medications : [Medication]
+    surgeries : [Surgery]
+    illnesses : [Illness]
+    diagnosticHistory : [DiagnosticRecord]
+    prescriptionHistory : [PrescriptionRecord]
+    immunizations : [Immunization]
+    familyHistory : [FamilyHistory]
+    grantedAt : Time
+    expiresAt : Optional Time
+  where
+    signatory patient
+    observer doctor
+
+    nonconsuming choice CreatePrescription
+      : ContractId Prescription
+      with
+        medication : Medication
+        notes : Text
+      controller doctor
+      do
+        now <- getTime
+        case expiresAt of
+          Some t -> assertMsg "Doctor access has expired" (now <= t)
+          None -> pure ()
+        create Prescription with
+          patient = patient
+          doctor = doctor
+          medication = medication
+          notes = notes
+          createdAt = now
+
+    nonconsuming choice CreateLabOrder
+      : ContractId LabOrder
+      with
+        labType : LabType
+        reason : Text
+      controller doctor
+      do
+        now <- getTime
+        case expiresAt of
+          Some t -> assertMsg "Doctor access has expired" (now <= t)
+          None -> pure ()
+        create LabOrder with
+          patient = patient
+          doctor = doctor
+          labType = labType
+          reason = reason
+          createdAt = now
+
+    choice RevokeDoctorAccess
+      : ()
+      controller patient
+      do
+        return ()

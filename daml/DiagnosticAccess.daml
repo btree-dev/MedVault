@@ -1,0 +1,38 @@
+module DiagnosticAccess where
+
+import Types
+import LabOrder
+import LabResults
+import DA.Text as T
+
+-- Diagnostic center access to lab order
+template DiagnosticAccess
+  with
+    patient : Party
+    diagnosticCenter : Party
+    labOrder : LabOrder
+  where
+    signatory patient
+    observer diagnosticCenter
+
+    choice SubmitLabResults
+      : ContractId LabResultReport
+      with
+        findings : Text
+        resultDate : Date
+      controller diagnosticCenter
+      do
+        assertMsg "Findings cannot be empty" (T.length findings > 0)
+        create LabResultReport with
+          patient = patient
+          diagnosticCenter = diagnosticCenter
+          labResult = LabResult with
+            labType = labOrder.labType
+            findings = findings
+            resultDate = resultDate
+
+    choice RevokeDiagnosticAccess
+      : ()
+      controller patient
+      do
+        return ()

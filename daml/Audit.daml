@@ -1,0 +1,37 @@
+module Audit where
+
+-- Observer that can be added to track system-wide events
+template AuditObserver
+  with
+    operator : Party
+    auditor : Party
+  where
+    signatory operator
+    observer auditor
+
+    nonconsuming choice LogEvent
+      : ContractId AuditEvent
+      with
+        eventType : Text
+        description : Text
+        timestamp : Time
+      controller operator
+      do
+        create AuditEvent with
+          operator = operator
+          auditor = auditor
+          eventType = eventType
+          description = description
+          timestamp = timestamp
+
+-- Immutable audit trail entry
+template AuditEvent
+  with
+    operator : Party
+    auditor : Party
+    eventType : Text
+    description : Text
+    timestamp : Time
+  where
+    signatory operator
+    observer auditor

@@ -1,0 +1,115 @@
+module HealthRecord where
+
+import Types
+import Prescription
+import LabOrder
+import DoctorAccess
+import PharmacyAccess
+import DiagnosticAccess
+import DA.Text as T
+import DA.Time
+
+-- Core patient health record with full medical history
+template HealthRecord
+  with
+    patient : Party
+    patientInfo : PatientInfo
+    allergies : [Allergy]
+    conditions : [Condition]
+    medications : [Medication]
+    surgeries : [Surgery]
+    illnesses : [Illness]
+    diagnosticHistory : [DiagnosticRecord]
+    prescriptionHistory : [PrescriptionRecord]
+    immunizations : [Immunization]
+    familyHistory : [FamilyHistory]
+  where
+    signatory patient
+
+    ensure T.length patientInfo.name > 0
+
+    choice UpdateRecord
+      : ContractId HealthRecord
+      with
+        newPatientInfo : PatientInfo
+        newAllergies : [Allergy]
+        newConditions : [Condition]
+        newMedications : [Medication]
+        newSurgeries : [Surgery]
+        newIllnesses : [Illness]
+        newDiagnosticHistory : [DiagnosticRecord]
+        newPrescriptionHistory : [PrescriptionRecord]
+        newImmunizations : [Immunization]
+        newFamilyHistory : [FamilyHistory]
+      controller patient
+      do
+        create this with
+          patientInfo = newPatientInfo
+          allergies = newAllergies
+          conditions = newConditions
+          medications = newMedications
+          surgeries = newSurgeries
+          illnesses = newIllnesses
+          diagnosticHistory = newDiagnosticHistory
+          prescriptionHistory = newPrescriptionHistory
+          immunizations = newImmunizations
+          familyHistory = newFamilyHistory
+
+    nonconsuming choice GrantDoctorAccess
+      : ContractId DoctorAccess
+      with
+        doctor : Party
+        duration : AccessDuration
+      controller patient
+      do
+        now <- getTime
+        let
+          expiry = case duration of
+            Days30 -> Some (addRelTime now (days 30))
+            Days60 -> Some (addRelTime now (days 60))
+            Indefinite -> None
+        create DoctorAccess with
+          patient = patient
+          doctor = doctor
+          patientInfo = patientInfo
+          allergies = allergies
+          conditions = conditions
+          medications = medications
+          surgeries = surgeries
+          illnesses = illnesses
+          diagnosticHistory = diagnosticHistory
+          prescriptionHistory = prescriptionHistory
+          immunizations = immunizations
+          familyHistory = familyHistory
+          grantedAt = now
+          expiresAt = expiry
+
+    nonconsuming choice GrantPharmacyAccess
+      : ContractId PharmacyAccess
+      with
+        pharmacy : Party
+        prescriptionCid : ContractId Prescription
+      controller patient
+      do
+        prescription <- fetch prescriptionCid
+        assertMsg "Prescription must belong to this patient" (prescription.patient == patient)
+        create PharmacyAccess with
+          patient = patient
+          pharmacy = pharmacy
+          prescription = prescription
+          allergies = allergies
+          medications = medications
+
+    nonconsuming choice GrantDiagnosticAccess
+      : ContractId DiagnosticAccess
+      with
+        diagnosticCenter : Party
+        labOrderCid : ContractId LabOrder
+      controller patient
+      do
+        labOrder <- fetch labOrderCid
+        assertMsg "Lab order must belong to this patient" (labOrder.patient == patient)
+        create DiagnosticAccess with
+          patient = patient
+          diagnosticCenter = diagnosticCenter
+          labOrder = labOrder
