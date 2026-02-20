@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { useParty, useLedger, useStreamQueries } from '@daml/react';
+import { useParty, useLedger, useStreamQueries } from '../services/DamlLedger';
 import { Header, Segment, Card, Button, Form, Message } from 'semantic-ui-react';
 
 const LabDashboard: React.FC = () => {
   const party = useParty();
   const ledger = useLedger();
 
-  const diagnosticAccesses = useStreamQueries('DiagnosticAccess:DiagnosticAccess' as any);
+  const diagnosticAccesses = useStreamQueries('#MedVault:DiagnosticAccess:DiagnosticAccess');
 
   const [findings, setFindings] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
@@ -16,10 +16,10 @@ const LabDashboard: React.FC = () => {
     const f = findings[contractId];
     if (!f) return;
     try {
-      await (ledger as any).exercise(
-        'DiagnosticAccess:DiagnosticAccess',
-        'SubmitLabResults',
+      await ledger.exercise(
+        '#MedVault:DiagnosticAccess:DiagnosticAccess',
         contractId,
+        'SubmitLabResults',
         {
           findings: f,
           resultDate: new Date().toISOString().split('T')[0],

@@ -3,10 +3,9 @@ FROM node:18-alpine AS build
 
 WORKDIR /app
 
-COPY frontend/package.json frontend/yarn.lock* ./
-RUN yarn install --frozen-lockfile
-
 COPY frontend/ .
+RUN rm -f .env .env.local .env.production .env.production.local
+RUN yarn install
 RUN yarn build
 
 # Stage 2: Serve with nginx

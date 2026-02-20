@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { useParty, useLedger, useStreamQueries } from '@daml/react';
+import { useParty, useLedger, useStreamQueries } from '../services/DamlLedger';
 import { Header, Segment, Form, Card, Button, Message } from 'semantic-ui-react';
 
 const OperatorDashboard: React.FC = () => {
   const party = useParty();
   const ledger = useLedger();
 
-  const operators = useStreamQueries('Operator:Operator' as any);
-  const invites = useStreamQueries('Operator:PatientInvite' as any);
+  const operators = useStreamQueries('#MedVault:Operator:Operator');
+  const invites = useStreamQueries('#MedVault:Operator:PatientInvite');
 
   const [patientParty, setPatientParty] = useState('');
   const [error, setError] = useState('');
@@ -15,7 +15,7 @@ const OperatorDashboard: React.FC = () => {
 
   const setupOperator = async () => {
     try {
-      await (ledger as any).create('Operator:Operator', { operator: party });
+      await ledger.create('#MedVault:Operator:Operator', { operator: party });
       setSuccess('Operator contract created');
       setError('');
     } catch (e: any) {
@@ -32,10 +32,10 @@ const OperatorDashboard: React.FC = () => {
       return;
     }
     try {
-      await (ledger as any).exercise(
-        'Operator:Operator',
-        'InvitePatient',
+      await ledger.exercise(
+        '#MedVault:Operator:Operator',
         op.contractId,
+        'InvitePatient',
         { patient: patientParty }
       );
       setPatientParty('');

@@ -1,22 +1,22 @@
 import React, { useState } from 'react';
-import { useParty, useLedger, useStreamQueries } from '@daml/react';
+import { useParty, useLedger, useStreamQueries } from '../services/DamlLedger';
 import { Header, Segment, Card, Button, Message, Label } from 'semantic-ui-react';
 
 const PharmacyDashboard: React.FC = () => {
   const party = useParty();
   const ledger = useLedger();
 
-  const pharmacyAccesses = useStreamQueries('PharmacyAccess:PharmacyAccess' as any);
+  const pharmacyAccesses = useStreamQueries('#MedVault:PharmacyAccess:PharmacyAccess');
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   const acknowledgeDispensing = async (contractId: string) => {
     try {
-      await (ledger as any).exercise(
-        'PharmacyAccess:PharmacyAccess',
-        'AcknowledgeDispensing',
+      await ledger.exercise(
+        '#MedVault:PharmacyAccess:PharmacyAccess',
         contractId,
+        'AcknowledgeDispensing',
         {}
       );
       setSuccess('Dispensing acknowledged');

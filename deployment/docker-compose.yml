@@ -2,33 +2,22 @@ version: "3.8"
 
 services:
   canton:
-    image: digitalasset/canton-community:3.4.10
+    image: ghcr.io/digital-asset/decentralized-canton-sync/docker/canton:0.5.12
     ports:
       - "6865:6865"  # Ledger API
       - "6866:6866"  # Admin API
       - "4401:4401"  # Sequencer public API
       - "4402:4402"  # Sequencer admin API
+      - "7575:7575"  # Built-in JSON API
     volumes:
-      - ./canton.conf:/canton/config/canton.conf
-      - ../daml:/canton/daml
-    command: ["daemon", "--config", "/canton/config/canton.conf"]
+      - ./canton.conf:/app/app.conf
+      - ./bootstrap.sc:/app/bootstrap.sc
+      - ../daml:/app/daml
     healthcheck:
       test: ["CMD", "grpcurl", "-plaintext", "localhost:6865", "list"]
       interval: 10s
       timeout: 5s
       retries: 10
-
-  json-api:
-    image: digitalasset/canton-json-api:3.4.10
-    ports:
-      - "7575:7575"
-    environment:
-      - LEDGER_HOST=canton
-      - LEDGER_PORT=6865
-      - HTTP_PORT=7575
-    depends_on:
-      canton:
-        condition: service_healthy
 
   frontend:
     build:
@@ -37,4 +26,5 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      - json-api
+      canton:
+        condition: service_healthy

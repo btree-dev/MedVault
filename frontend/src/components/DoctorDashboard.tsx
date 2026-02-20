@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParty, useLedger, useStreamQueries } from '@daml/react';
+import { useParty, useLedger, useStreamQueries } from '../services/DamlLedger';
 import { Header, Segment, Form, Card, Button, Message, Dropdown } from 'semantic-ui-react';
 import MedicalHistoryView from './MedicalHistoryView';
 
@@ -16,7 +16,7 @@ const DoctorDashboard: React.FC = () => {
   const party = useParty();
   const ledger = useLedger();
 
-  const doctorAccesses = useStreamQueries('DoctorAccess:DoctorAccess' as any);
+  const doctorAccesses = useStreamQueries('#MedVault:DoctorAccess:DoctorAccess');
 
   const [selectedAccess, setSelectedAccess] = useState<string | null>(null);
   const [medName, setMedName] = useState('');
@@ -31,10 +31,10 @@ const DoctorDashboard: React.FC = () => {
   const createPrescription = async () => {
     if (!selectedAccess || !medName) return;
     try {
-      await (ledger as any).exercise(
-        'DoctorAccess:DoctorAccess',
-        'CreatePrescription',
+      await ledger.exercise(
+        '#MedVault:DoctorAccess:DoctorAccess',
         selectedAccess,
+        'CreatePrescription',
         {
           medication: {
             name: medName,
@@ -61,10 +61,10 @@ const DoctorDashboard: React.FC = () => {
   const createLabOrder = async () => {
     if (!selectedAccess || !labReason) return;
     try {
-      await (ledger as any).exercise(
-        'DoctorAccess:DoctorAccess',
-        'CreateLabOrder',
+      await ledger.exercise(
+        '#MedVault:DoctorAccess:DoctorAccess',
         selectedAccess,
+        'CreateLabOrder',
         { labType, reason: labReason }
       );
       setLabReason('');

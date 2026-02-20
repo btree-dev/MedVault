@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import DamlLedger from '@daml/react';
 import { Container, Header } from 'semantic-ui-react';
-import { cantonConfig, UserSession } from './services/canton';
+import { DamlLedger } from './services/DamlLedger';
+import { UserSession } from './services/canton';
 import LoginScreen from './components/LoginScreen';
 import PatientDashboard from './components/PatientDashboard';
 import DoctorDashboard from './components/DoctorDashboard';
@@ -33,9 +33,8 @@ const App: React.FC = () => {
 
   return (
     <DamlLedger
+      userId={session.token}
       party={session.party}
-      token={session.token}
-      httpBaseUrl={cantonConfig.baseUrl}
     >
       <Container style={{ marginTop: '2em' }}>
         <Header as="h1">
