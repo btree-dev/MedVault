@@ -1,0 +1,14 @@
+module DoctorNote where
+
+-- Clinical notes written by a doctor about a patient
+template DoctorNote
+  with
+    patient : Party
+    doctor : Party
+    noteType : Text  -- e.g. "Diagnosis", "Observation", "Follow-up", "Referral"
+    content : Text
+    createdAt : Time
+  where
+    signatory patient, doctor
+    -- Both parties are signatories since this is created via DoctorAccess
+    -- (patient signed DoctorAccess, doctor exercises the choice)

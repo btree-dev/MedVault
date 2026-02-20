@@ -3,6 +3,7 @@ module DoctorAccess where
 import Types
 import Prescription
 import LabOrder
+import DoctorNote
 
 -- Time-limited doctor access to full patient medical history
 template DoctorAccess
@@ -59,6 +60,24 @@ template DoctorAccess
           doctor = doctor
           labType = labType
           reason = reason
+          createdAt = now
+
+    nonconsuming choice CreateDoctorNote
+      : ContractId DoctorNote
+      with
+        noteType : Text
+        content : Text
+      controller doctor
+      do
+        now <- getTime
+        case expiresAt of
+          Some t -> assertMsg "Doctor access has expired" (now <= t)
+          None -> pure ()
+        create DoctorNote with
+          patient = patient
+          doctor = doctor
+          noteType = noteType
+          content = content
           createdAt = now
 
     choice RevokeDoctorAccess

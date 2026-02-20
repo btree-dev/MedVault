@@ -1208,10 +1208,10 @@
   resolved "https://registry.yarnpkg.com/@csstools/selector-specificity/-/selector-specificity-2.2.0.tgz#2cbcf822bf3764c9658c4d2e568bd0c0cb748016"
   integrity sha512-+OJ9konv95ClSTOJCmMZqpd5+YGsB2S+x6w3E1oaM8UuR5j8nTNHYSz8c9BEPGDOCMQYIEEGlVPj/VY64iTbGw==
 
-"@daml.js/MedVault-0.0.1@file:src/@daml.js/MedVault-0.0.1":
+"@daml.js/MedVault-0.0.2@file:src/@daml.js/MedVault-0.0.2":
   version "0.0.0"
   dependencies:
-    "@daml.js/ghc-stdlib-DA-Internal-Template-1.0.0" "file:../../../../.cache/yarn/v6/npm-@daml-js-ed-ault-0-0-1-0.0.0-b15a020c-5610-41bd-a46c-e90db816502c-1771571755891/node_modules/@daml.js/ghc-stdlib-DA-Internal-Template-1.0.0"
+    "@daml.js/ghc-stdlib-DA-Internal-Template-1.0.0" "file:../../../../.cache/yarn/v6/npm-@daml-js-ed-ault-0-0-2-0.0.0-45945204-3445-4a4c-9c24-27048dd75615-1771574623107/node_modules/@daml.js/ghc-stdlib-DA-Internal-Template-1.0.0"
     "@mojotech/json-type-validation" "^3.1.0"
 
 "@daml.js/daml-prim-DA-Exception-ArithmeticError-1.0.0@file:src/@daml.js/daml-prim-DA-Exception-ArithmeticError-1.0.0":
@@ -1302,7 +1302,7 @@
 "@daml.js/daml-stdlib-DA-Validation-Types-1.0.0@file:src/@daml.js/daml-stdlib-DA-Validation-Types-1.0.0":
   version "0.0.0"
   dependencies:
-    "@daml.js/daml-stdlib-DA-NonEmpty-Types-1.0.0" "file:../../../../.cache/yarn/v6/npm-@daml-js-daml-stdlib-alidation-ypes-1-0-0-0.0.0-dbbdf386-3b04-45e2-89d8-60ca5b9cefe2-1771571755910/node_modules/@daml.js/daml-stdlib-DA-NonEmpty-Types-1.0.0"
+    "@daml.js/daml-stdlib-DA-NonEmpty-Types-1.0.0" "file:../../../../.cache/yarn/v6/npm-@daml-js-daml-stdlib-alidation-ypes-1-0-0-0.0.0-305bc580-b548-4e65-9e11-6391787062c3-1771574623135/node_modules/@daml.js/daml-stdlib-DA-NonEmpty-Types-1.0.0"
     "@mojotech/json-type-validation" "^3.1.0"
 
 "@daml.js/ghc-stdlib-DA-Internal-Template-1.0.0@file:src/@daml.js/ghc-stdlib-DA-Internal-Template-1.0.0":

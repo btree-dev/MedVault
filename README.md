@@ -30,9 +30,9 @@ MedVault/
 │   ├── Dockerfile             # Multi-stage frontend build
 │   └── nginx.conf             # SPA routing + API proxy
 └── scripts/                   # Build and deploy automation
-    ├── build.sh               # Build contracts + frontend
-    ├── deploy.sh              # Deploy full stack
-    └── setup-parties.sh       # Allocate standard parties
+    ├── build.sh               # Build Daml contracts
+    ├── deploy.sh              # Start sandbox + create parties
+    └── setup-parties.sh       # Allocate parties and users via v2 HTTP API
 ```
 
 ## Prerequisites
@@ -41,40 +41,52 @@ MedVault/
 - Node.js 18+ and Yarn
 - Docker and Docker Compose
 
-## Quick Start (Docker — full stack)
+## Quick Start (Local Sandbox)
 
-This is the simplest way to run the complete application.
+The fastest way to run the application for development.
 
 ### 1. Build the Daml contracts
 
 ```bash
-dpm build
+./scripts/build.sh
 ```
 
-This produces `.daml/dist/MedVault-0.0.1.dar`.
+This compiles the Daml source and produces `.daml/dist/MedVault-0.0.2.dar`.
 
-### 2. Start Canton and the frontend
+### 2. Start the Canton sandbox and create parties
 
 ```bash
-docker compose -f deployment/docker-compose.yml up -d
+./scripts/deploy.sh
 ```
 
-This starts:
-- **Canton** (sequencer + mediator + participant with built-in JSON API) — automatically bootstraps the synchronizer, allocates parties, and creates users via `bootstrap.sc`
-- **Frontend** (nginx serving the React build, proxying `/v2/` to Canton)
+This runs `dpm sandbox` which starts a full Canton node (sequencer + mediator + participant + JSON API) in a single process. It then:
+- Uploads the DAR automatically via the `--dar` flag
+- Waits for the JSON API to be ready on port 7575
+- Allocates parties and creates ledger API users via `scripts/setup-parties.sh`
 
-### 3. Upload the DAR
-
-Once Canton is healthy (the frontend container waits for this automatically), upload the compiled contracts:
+You can also run these steps separately:
 
 ```bash
-# Wait for Canton to be ready
-until grpcurl -plaintext localhost:6865 list 2>/dev/null; do sleep 3; done
+# Start sandbox (runs in foreground)
+dpm sandbox --dar .daml/dist/MedVault-0.0.2.dar --json-api-port 7575
 
-# Upload the DAR
-docker compose -f deployment/docker-compose.yml exec canton \
-  /app/bin/canton ledger upload-dar --host localhost --port 6865 /app/daml/.daml/dist/MedVault-0.0.1.dar
+# In another terminal, set up parties
+./scripts/setup-parties.sh
 ```
+
+### 3. Start the frontend dev server
+
+In a separate terminal:
+
+```bash
+cd frontend
+yarn install
+REACT_APP_LEDGER_URL= PORT=3001 yarn start
+```
+
+The dev server runs on **http://localhost:3001** with hot-reload. The CRA proxy forwards `/v2/` requests to Canton on `localhost:7575`.
+
+> **Important:** `REACT_APP_LEDGER_URL=` (set to empty) is required to override the value in `frontend/.env` and use the CRA proxy for local development.
 
 ### 4. Open the app
 
@@ -97,43 +109,31 @@ Navigate to **http://localhost:3000**. You'll see the Development Login screen w
 4. Log in as **Dr. Smith (Doctor)** → View Alice's record, add notes, write prescriptions
 5. Log in as **PharmaCorp** or **LabCorp** to see prescriptions or lab orders
 
-### Stop the stack
+### Stop the sandbox
+
+Press `Ctrl+C` in the terminal running `deploy.sh`, or kill the sandbox process.
+
+> **Note:** The sandbox uses in-memory storage, so all data is lost when it stops.
+
+## Docker Deployment (production-like)
+
+For a production-like setup with nginx serving the frontend:
 
 ```bash
+# Build contracts and Docker images
+./scripts/build.sh
+docker compose -f deployment/docker-compose.yml build
+
+# Start the stack
+docker compose -f deployment/docker-compose.yml up -d
+```
+
+This starts Canton with `bootstrap.sc` (which handles synchronizer setup, party allocation, and user creation) and nginx serving the frontend on port 3000.
+
+```bash
+# Stop the stack
 docker compose -f deployment/docker-compose.yml down
 ```
-
-> **Note:** Canton uses in-memory storage, so all data is lost when containers stop.
-
-## Development Setup (frontend hot-reload)
-
-For faster frontend iteration, run Canton in Docker and the frontend locally with hot-reload.
-
-### 1. Start Canton only
-
-```bash
-docker compose -f deployment/docker-compose.yml up -d canton
-```
-
-Wait for it to be healthy, then upload the DAR (see step 3 above).
-
-### 2. Start the frontend dev server
-
-```bash
-cd frontend
-yarn install
-REACT_APP_LEDGER_URL= PORT=3001 yarn start
-```
-
-- The dev server runs on **http://localhost:3001**
-- `REACT_APP_LEDGER_URL=` (empty) tells the app to use relative URLs, which the CRA proxy forwards to Canton
-- The `proxy` field in `package.json` routes API requests to `http://localhost:7575` (Canton's JSON API)
-
-> **Important:** The `frontend/.env` file may contain a remote `REACT_APP_LEDGER_URL`. Setting it to empty on the command line overrides this for local development.
-
-### 3. Make changes
-
-Edit components in `frontend/src/components/` — the browser will hot-reload automatically.
 
 ## Building Daml Contracts
 
@@ -143,12 +143,7 @@ dpm build
 
 # Run tests
 dpm test
-
-# Regenerate TypeScript bindings (after changing .daml files)
-dpm codegen-js .daml/dist/MedVault-0.0.1.dar -o frontend/src/@daml.js
 ```
-
-After regenerating bindings, restart the frontend dev server.
 
 ## Architecture
 
@@ -160,11 +155,7 @@ Canton runs as a single-node deployment with:
 - **Participant** — hosts parties and executes Daml contracts
 - **HTTP JSON API** (built-in, port 7575) — REST interface for the frontend
 
-On startup, `bootstrap.sc` automatically:
-1. Creates the synchronizer (wires sequencer + mediator)
-2. Connects the participant
-3. Allocates parties: Operator, Alice, Bob, DrSmith, DrJones, PharmaCorp, LabCorp
-4. Creates ledger API users with appropriate read/write permissions
+For local development, `dpm sandbox` handles topology automatically. The `scripts/setup-parties.sh` script then allocates parties and creates users via the v2 HTTP API. For Docker deployment, `bootstrap.sc` handles both topology and party/user setup.
 
 ### Frontend
 

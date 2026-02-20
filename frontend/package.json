@@ -6,7 +6,7 @@
     "@daml/ledger": "3.4.0-snapshot.20250828.14149.0.v97b5a3dc",
     "@daml/react": "3.4.0-snapshot.20250828.14149.0.v97b5a3dc",
     "@daml/types": "3.4.0-snapshot.20250828.14149.0.v97b5a3dc",
-    "@daml.js/MedVault-0.0.1": "file:src/@daml.js/MedVault-0.0.1",
+    "@daml.js/MedVault-0.0.2": "file:src/@daml.js/MedVault-0.0.2",
     "@daml.js/ghc-stdlib-DA-Internal-Template-1.0.0": "file:src/@daml.js/ghc-stdlib-DA-Internal-Template-1.0.0",
     "@daml.js/daml-prim-DA-Types-1.0.0": "file:src/@daml.js/daml-prim-DA-Types-1.0.0",
     "@daml.js/daml-prim-DA-Exception-ArithmeticError-1.0.0": "file:src/@daml.js/daml-prim-DA-Exception-ArithmeticError-1.0.0",
@@ -39,6 +39,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "serve": "REACT_APP_LEDGER_URL= PORT=3001 react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test"
   },
