@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParty, useLedger, useStreamQueries } from '../services/DamlLedger';
-import { Header, Segment, Card, Button, Message, Label, Table } from 'semantic-ui-react';
+import { Header, Segment, Card, Button, Message, Label, Table, Form, TextArea } from 'semantic-ui-react';
 
 const PharmacyDashboard: React.FC = () => {
   const party = useParty();
@@ -10,6 +10,7 @@ const PharmacyDashboard: React.FC = () => {
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [dispensingNotes, setDispensingNotes] = useState<Record<string, string>>({});
 
   const acknowledgeDispensing = async (contractId: string) => {
     try {
@@ -17,7 +18,7 @@ const PharmacyDashboard: React.FC = () => {
         '#MedVault:PharmacyAccess:PharmacyAccess',
         contractId,
         'AcknowledgeDispensing',
-        {}
+        { dispensingNote: dispensingNotes[contractId] || '' }
       );
       setSuccess('Medication dispensed and recorded');
       setError('');
@@ -93,9 +94,20 @@ const PharmacyDashboard: React.FC = () => {
                   </Card.Description>
                 </Card.Content>
                 <Card.Content extra>
-                  <Button primary onClick={() => acknowledgeDispensing(c.contractId)}>
-                    Dispense Medication
-                  </Button>
+                  <Form>
+                    <Form.Field>
+                      <label>Dispensing Note (optional)</label>
+                      <TextArea
+                        placeholder="e.g. Substituted generic equivalent, counseled patient on side effects..."
+                        value={dispensingNotes[c.contractId] || ''}
+                        onChange={(_, { value }) => setDispensingNotes(prev => ({ ...prev, [c.contractId]: value as string }))}
+                        rows={2}
+                      />
+                    </Form.Field>
+                    <Button primary onClick={() => acknowledgeDispensing(c.contractId)}>
+                      Dispense Medication
+                    </Button>
+                  </Form>
                 </Card.Content>
               </Card>
             ))}

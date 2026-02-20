@@ -23,6 +23,8 @@ template PharmacyAccess
 
     choice AcknowledgeDispensing
       : ()
+      with
+        dispensingNote : Text
       controller pharmacy
       do
         return ()

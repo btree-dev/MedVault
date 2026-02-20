@@ -67,6 +67,6 @@ test_pharmacyAccessAndDispensing = do
 
   -- 9. Pharmacy acknowledges dispensing
   submit pharmacy do
-    exerciseCmd pharmacyAccess AcknowledgeDispensing
+    exerciseCmd pharmacyAccess AcknowledgeDispensing with dispensingNote = "Dispensed as prescribed"
 
   return ()
