@@ -2,6 +2,7 @@ module Test.DiagnosticAccessTest where
 
 import Types
 import HealthRecord
+import AccessGrants
 import DiagnosticAccess
 import DA.Date hiding (date)
 import DA.Time
@@ -31,12 +32,18 @@ test_diagnosticAccessAndResults = do
       illnesses = []
       diagnosticHistory = []
       prescriptionHistory = []
+      dispenseHistory = []
       immunizations = []
       familyHistory = []
 
+  accessManager <- submit patient do
+    createCmd PatientAccessManager with
+      patient = patient
+
   -- Grant doctor access and create lab order
   doctorAccess <- submit patient do
-    exerciseCmd healthRecord GrantDoctorAccess with
+    exerciseCmd accessManager GrantDoctorAccess with
+      healthRecordCid = healthRecord
       doctor = drSmith
       duration = Days30
 
@@ -47,7 +54,8 @@ test_diagnosticAccessAndResults = do
 
   -- 10. Patient grants diagnostic center access to lab order
   diagnosticAccess <- submit patient do
-    exerciseCmd healthRecord GrantDiagnosticAccess with
+    exerciseCmd accessManager GrantDiagnosticAccess with
+      healthRecordCid = healthRecord
       diagnosticCenter = labCorp
       labOrderCid = labOrder
 
@@ -59,7 +67,8 @@ test_diagnosticAccessAndResults = do
 
   -- 12. Empty findings should fail
   diagnosticAccess2 <- submit patient do
-    exerciseCmd healthRecord GrantDiagnosticAccess with
+    exerciseCmd accessManager GrantDiagnosticAccess with
+      healthRecordCid = healthRecord
       diagnosticCenter = labCorp
       labOrderCid = labOrder
 

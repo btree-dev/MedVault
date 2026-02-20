@@ -3,10 +3,52 @@ import { Table, Header, Label, Segment } from 'semantic-ui-react';
 
 interface Props {
   record: any;
+  // Live contract data (supplements the static record snapshot)
+  prescriptions?: any[];
+  dispenseEntries?: any[];
+  labOrders?: any[];
+  labResults?: any[];
 }
 
-const MedicalHistoryView: React.FC<Props> = ({ record }) => {
-  const { patientInfo, allergies, conditions, medications, surgeries, illnesses, immunizations, familyHistory } = record;
+const MedicalHistoryView: React.FC<Props> = ({ record, prescriptions, dispenseEntries, labOrders, labResults }) => {
+  const { patientInfo, allergies, conditions, medications, surgeries, illnesses, diagnosticHistory, prescriptionHistory, dispenseHistory, immunizations, familyHistory } = record;
+
+  // Merge static record medications with active (not course-completed) prescriptions for "Current Medications"
+  const liveMedications = prescriptions?.filter((c: any) => !c.payload.courseCompleted).map((c: any) => c.payload.medication) || [];
+  const allMedications = [...(medications || []), ...liveMedications];
+
+  // Build prescription history from live Prescription contracts
+  const livePrescriptionHistory = prescriptions?.map((c: any) => ({
+    medication: c.payload.medication?.name,
+    date: c.payload.medication?.prescribedDate,
+    doctor: c.payload.doctor,
+    notes: c.payload.notes,
+    filled: c.payload.filled,
+  })) || [];
+  const allPrescriptionHistory = [...(prescriptionHistory || []), ...livePrescriptionHistory];
+
+  // Build dispensing history from live DispenseEntry contracts
+  const liveDispenseHistory = dispenseEntries?.map((c: any) => c.payload.dispenseRecord) || [];
+  const allDispenseHistory = [...(dispenseHistory || []), ...liveDispenseHistory];
+
+  // Build diagnostic history from live LabOrder + LabResultReport contracts
+  const liveDiagnosticHistory = [
+    ...(labOrders?.map((c: any) => ({
+      diagType: c.payload.labType,
+      date: '',
+      facility: '',
+      findings: `Ordered: ${c.payload.reason}`,
+      orderedBy: c.payload.doctor,
+    })) || []),
+    ...(labResults?.map((c: any) => ({
+      diagType: c.payload.labResult?.labType,
+      date: c.payload.labResult?.resultDate,
+      facility: c.payload.diagnosticCenter,
+      findings: c.payload.labResult?.findings,
+      orderedBy: '',
+    })) || []),
+  ];
+  const allDiagnosticHistory = [...(diagnosticHistory || []), ...liveDiagnosticHistory];
 
   return (
     <div>
@@ -53,7 +95,7 @@ const MedicalHistoryView: React.FC<Props> = ({ record }) => {
         </Segment>
       )}
 
-      {medications.length > 0 && (
+      {allMedications.length > 0 && (
         <Segment>
           <Header as="h4">Current Medications</Header>
           <Table compact>
@@ -65,11 +107,95 @@ const MedicalHistoryView: React.FC<Props> = ({ record }) => {
               </Table.Row>
             </Table.Header>
             <Table.Body>
-              {medications.map((m: any, i: number) => (
+              {allMedications.map((m: any, i: number) => (
                 <Table.Row key={i}>
                   <Table.Cell>{m.name}</Table.Cell>
                   <Table.Cell>{m.dosage}</Table.Cell>
                   <Table.Cell>{m.frequency}</Table.Cell>
+                </Table.Row>
+              ))}
+            </Table.Body>
+          </Table>
+        </Segment>
+      )}
+
+      {allPrescriptionHistory.length > 0 && (
+        <Segment>
+          <Header as="h4">Prescription History</Header>
+          <Table compact>
+            <Table.Header>
+              <Table.Row>
+                <Table.HeaderCell>Medication</Table.HeaderCell>
+                <Table.HeaderCell>Date</Table.HeaderCell>
+                <Table.HeaderCell>Doctor</Table.HeaderCell>
+                <Table.HeaderCell>Notes</Table.HeaderCell>
+                <Table.HeaderCell>Status</Table.HeaderCell>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {allPrescriptionHistory.map((p: any, i: number) => (
+                <Table.Row key={i}>
+                  <Table.Cell>{p.medication}</Table.Cell>
+                  <Table.Cell>{p.date}</Table.Cell>
+                  <Table.Cell>{p.doctor}</Table.Cell>
+                  <Table.Cell>{p.notes}</Table.Cell>
+                  <Table.Cell>{p.filled ? <Label color="green" size="tiny">Filled</Label> : <Label color="orange" size="tiny">Pending</Label>}</Table.Cell>
+                </Table.Row>
+              ))}
+            </Table.Body>
+          </Table>
+        </Segment>
+      )}
+
+      {allDispenseHistory.length > 0 && (
+        <Segment>
+          <Header as="h4">Dispensing History</Header>
+          <Table compact>
+            <Table.Header>
+              <Table.Row>
+                <Table.HeaderCell>Medication</Table.HeaderCell>
+                <Table.HeaderCell>Dosage</Table.HeaderCell>
+                <Table.HeaderCell>Date</Table.HeaderCell>
+                <Table.HeaderCell>Pharmacy</Table.HeaderCell>
+                <Table.HeaderCell>Note</Table.HeaderCell>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {allDispenseHistory.map((d: any, i: number) => (
+                <Table.Row key={i}>
+                  <Table.Cell>{d.medication}</Table.Cell>
+                  <Table.Cell>{d.dosage}</Table.Cell>
+                  <Table.Cell>{d.dispensedDate}</Table.Cell>
+                  <Table.Cell>{d.pharmacy}</Table.Cell>
+                  <Table.Cell>{d.dispensingNote}</Table.Cell>
+                </Table.Row>
+              ))}
+            </Table.Body>
+          </Table>
+        </Segment>
+      )}
+
+      {allDiagnosticHistory.length > 0 && (
+        <Segment>
+          <Header as="h4">Diagnostic History</Header>
+          <Table compact>
+            <Table.Header>
+              <Table.Row>
+                <Table.HeaderCell>Type</Table.HeaderCell>
+                <Table.HeaderCell>Date</Table.HeaderCell>
+                <Table.HeaderCell>Facility</Table.HeaderCell>
+                <Table.HeaderCell>Findings</Table.HeaderCell>
+                <Table.HeaderCell>Ordered By</Table.HeaderCell>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {allDiagnosticHistory.map((d: any, i: number) => (
+                <Table.Row key={i}>
+                  <Table.Cell>{d.diagType}</Table.Cell>
+                  <Table.Cell>{d.date}</Table.Cell>
+                  <Table.Cell>{d.facility}</Table.Cell>
+                  <Table.Cell>{d.findings}</Table.Cell>
+                  <Table.Cell>{d.orderedBy}</Table.Cell>
                 </Table.Row>
               ))}
             </Table.Body>

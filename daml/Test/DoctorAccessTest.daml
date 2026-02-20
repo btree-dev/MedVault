@@ -2,13 +2,14 @@ module Test.DoctorAccessTest where
 
 import Types
 import HealthRecord
+import AccessGrants
 import DoctorAccess
 import DA.Date hiding (date)
 import DA.Time
 import Daml.Script
 
--- Helper to create a standard test health record
-setupHealthRecord : Script (Party, Party, Party, ContractId HealthRecord)
+-- Helper to create a standard test health record with access manager
+setupHealthRecord : Script (Party, Party, Party, ContractId HealthRecord, ContractId PatientAccessManager)
 setupHealthRecord = do
   patient <- allocateParty "Alice"
   drSmith <- allocateParty "DrSmith"
@@ -75,6 +76,7 @@ setupHealthRecord = do
             notes = "For pneumonia treatment"
             active = False
         ]
+      dispenseHistory = []
       immunizations =
         [ Immunization with
             name = "COVID-19 Pfizer"
@@ -96,14 +98,19 @@ setupHealthRecord = do
             notes = "Diagnosed at age 60, in remission"
         ]
 
-  return (patient, drSmith, drJones, healthRecord)
+  accessManager <- submit patient do
+    createCmd PatientAccessManager with
+      patient = patient
+
+  return (patient, drSmith, drJones, healthRecord, accessManager)
 
 -- Test 3: Doctor cannot grant themselves access
 test_doctorCannotSelfGrant = do
-  (patient, drSmith, _drJones, healthRecord) <- setupHealthRecord
+  (patient, drSmith, _drJones, healthRecord, accessManager) <- setupHealthRecord
 
   submitMustFail drSmith do
-    exerciseCmd healthRecord GrantDoctorAccess with
+    exerciseCmd accessManager GrantDoctorAccess with
+      healthRecordCid = healthRecord
       doctor = drSmith
       duration = Days30
 
@@ -111,11 +118,12 @@ test_doctorCannotSelfGrant = do
 
 -- Test 4 & 5: Patient grants DrSmith 30-day access; Doctor creates prescription
 test_doctorAccessAndPrescription = do
-  (patient, drSmith, _drJones, healthRecord) <- setupHealthRecord
+  (patient, drSmith, _drJones, healthRecord, accessManager) <- setupHealthRecord
 
   -- 4. Patient grants DrSmith 30-day access
   doctorAccess <- submit patient do
-    exerciseCmd healthRecord GrantDoctorAccess with
+    exerciseCmd accessManager GrantDoctorAccess with
+      healthRecordCid = healthRecord
       doctor = drSmith
       duration = Days30
 
@@ -134,10 +142,11 @@ test_doctorAccessAndPrescription = do
 
 -- Test 6 & 7: Doctor creates lab order; Empty-reason lab order fails
 test_doctorLabOrders = do
-  (patient, drSmith, _drJones, healthRecord) <- setupHealthRecord
+  (patient, drSmith, _drJones, healthRecord, accessManager) <- setupHealthRecord
 
   doctorAccess <- submit patient do
-    exerciseCmd healthRecord GrantDoctorAccess with
+    exerciseCmd accessManager GrantDoctorAccess with
+      healthRecordCid = healthRecord
       doctor = drSmith
       duration = Days30
 
@@ -157,10 +166,11 @@ test_doctorLabOrders = do
 
 -- Test 15: 30-day access expires after 31 days
 test_accessExpiry = do
-  (patient, _drSmith, drJones, healthRecord) <- setupHealthRecord
+  (patient, _drSmith, drJones, healthRecord, accessManager) <- setupHealthRecord
 
   doctorAccess <- submit patient do
-    exerciseCmd healthRecord GrantDoctorAccess with
+    exerciseCmd accessManager GrantDoctorAccess with
+      healthRecordCid = healthRecord
       doctor = drJones
       duration = Days30
 
@@ -180,10 +190,11 @@ test_accessExpiry = do
 
 -- Test 16: Indefinite access still works after 365+ days
 test_indefiniteAccess = do
-  (patient, drSmith, _drJones, healthRecord) <- setupHealthRecord
+  (patient, drSmith, _drJones, healthRecord, accessManager) <- setupHealthRecord
 
   doctorAccess <- submit patient do
-    exerciseCmd healthRecord GrantDoctorAccess with
+    exerciseCmd accessManager GrantDoctorAccess with
+      healthRecordCid = healthRecord
       doctor = drSmith
       duration = Indefinite
 
@@ -203,10 +214,11 @@ test_indefiniteAccess = do
 
 -- Test 17: Patient revokes doctor access; further actions fail
 test_revokeAccess = do
-  (patient, _drSmith, drJones, healthRecord) <- setupHealthRecord
+  (patient, _drSmith, drJones, healthRecord, accessManager) <- setupHealthRecord
 
   doctorAccess <- submit patient do
-    exerciseCmd healthRecord GrantDoctorAccess with
+    exerciseCmd accessManager GrantDoctorAccess with
+      healthRecordCid = healthRecord
       doctor = drJones
       duration = Indefinite
 

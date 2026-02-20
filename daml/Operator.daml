@@ -2,6 +2,7 @@ module Operator where
 
 import Types
 import HealthRecord
+import AccessGrants
 
 -- Operator manages the system and onboards patients
 template Operator
@@ -35,7 +36,7 @@ template PatientInvite
         patientInfo : PatientInfo
       controller patient
       do
-        create HealthRecord with
+        hrCid <- create HealthRecord with
           patient = patient
           patientInfo = patientInfo
           allergies = []
@@ -45,8 +46,12 @@ template PatientInvite
           illnesses = []
           diagnosticHistory = []
           prescriptionHistory = []
+          dispenseHistory = []
           immunizations = []
           familyHistory = []
+        _ <- create PatientAccessManager with
+          patient = patient
+        return hrCid
 
     choice RejectInvite
       : ()

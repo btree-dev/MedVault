@@ -4,8 +4,9 @@ import Types
 import Prescription
 import LabOrder
 import DoctorNote
+import DA.Time
 
--- Time-limited doctor access to full patient medical history
+-- Time-limited doctor access to full patient medical history (point-in-time snapshot)
 template DoctorAccess
   with
     patient : Party
@@ -18,6 +19,7 @@ template DoctorAccess
     illnesses : [Illness]
     diagnosticHistory : [DiagnosticRecord]
     prescriptionHistory : [PrescriptionRecord]
+    dispenseHistory : [DispenseRecord]
     immunizations : [Immunization]
     familyHistory : [FamilyHistory]
     grantedAt : Time
@@ -43,6 +45,9 @@ template DoctorAccess
           medication = medication
           notes = notes
           createdAt = now
+          filled = False
+          courseCompleted = False
+          additionalObservers = []
 
     nonconsuming choice CreateLabOrder
       : ContractId LabOrder

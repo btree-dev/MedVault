@@ -11,8 +11,34 @@ template Prescription
     medication : Medication
     notes : Text
     createdAt : Time
+    filled : Bool
+    courseCompleted : Bool
+    additionalObservers : [Party]
   where
     signatory patient
-    observer doctor
+    observer doctor :: additionalObservers
 
     ensure T.length medication.name > 0
+
+    choice MarkFilled
+      : ContractId Prescription
+      controller patient
+      do
+        assertMsg "Prescription is already filled" (not filled)
+        create this with filled = True
+
+    choice SetCourseStatus
+      : ContractId Prescription
+      with
+        completed : Bool
+      controller patient
+      do
+        create this with courseCompleted = completed
+
+    choice AddObserver
+      : ContractId Prescription
+      with
+        newObserver : Party
+      controller patient
+      do
+        create this with additionalObservers = newObserver :: additionalObservers

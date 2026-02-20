@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParty, useLedger, useStreamQueries } from '../services/DamlLedger';
 import { Header, Segment, Form, Card, Button, Message, Dropdown, Table, Label } from 'semantic-ui-react';
 import MedicalHistoryView from './MedicalHistoryView';
@@ -17,10 +17,11 @@ const DoctorDashboard: React.FC = () => {
   const ledger = useLedger();
 
   const doctorAccesses = useStreamQueries('#MedVault:DoctorAccess:DoctorAccess');
-  const labResultAccesses = useStreamQueries('#MedVault:LabResults:DoctorLabResultAccess');
+  const prescriptions = useStreamQueries('#MedVault:Prescription:Prescription');
+  const labOrders = useStreamQueries('#MedVault:LabOrder:LabOrder');
   const doctorNotes = useStreamQueries('#MedVault:DoctorNote:DoctorNote');
 
-  const [selectedAccess, setSelectedAccess] = useState<string | null>(null);
+  const [selectedPatientParty, setSelectedPatientParty] = useState<string | null>(null);
   const [medName, setMedName] = useState('');
   const [medDosage, setMedDosage] = useState('');
   const [medFrequency, setMedFrequency] = useState('');
@@ -32,12 +33,30 @@ const DoctorDashboard: React.FC = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Find the current DoctorAccess contract for the selected patient
+  const selectedPatient = doctorAccesses.contracts.find(
+    (c: any) => c.payload.patient === selectedPatientParty
+  ) as any;
+
+  // Clear selection if the patient's access no longer exists
+  useEffect(() => {
+    if (selectedPatientParty && !selectedPatient) {
+      // Check if there's still a contract for this patient (may have been recreated)
+      const stillExists = doctorAccesses.contracts.some(
+        (c: any) => c.payload.patient === selectedPatientParty
+      );
+      if (!stillExists) {
+        setSelectedPatientParty(null);
+      }
+    }
+  }, [doctorAccesses.contracts, selectedPatientParty, selectedPatient]);
+
   const createPrescription = async () => {
-    if (!selectedAccess || !medName) return;
+    if (!selectedPatient || !medName) return;
     try {
       await ledger.exercise(
         '#MedVault:DoctorAccess:DoctorAccess',
-        selectedAccess,
+        selectedPatient.contractId,
         'CreatePrescription',
         {
           medication: {
@@ -54,7 +73,7 @@ const DoctorDashboard: React.FC = () => {
       setMedDosage('');
       setMedFrequency('');
       setPrescNotes('');
-      setSuccess('Prescription created');
+      setSuccess('Prescription created and recorded in patient history');
       setError('');
     } catch (e: any) {
       setError(e.message);
@@ -63,16 +82,16 @@ const DoctorDashboard: React.FC = () => {
   };
 
   const createLabOrder = async () => {
-    if (!selectedAccess || !labReason) return;
+    if (!selectedPatient || !labReason) return;
     try {
       await ledger.exercise(
         '#MedVault:DoctorAccess:DoctorAccess',
-        selectedAccess,
+        selectedPatient.contractId,
         'CreateLabOrder',
         { labType, reason: labReason }
       );
       setLabReason('');
-      setSuccess('Lab order created');
+      setSuccess('Lab order created and recorded in patient history');
       setError('');
     } catch (e: any) {
       setError(e.message);
@@ -81,11 +100,11 @@ const DoctorDashboard: React.FC = () => {
   };
 
   const createDoctorNote = async () => {
-    if (!selectedAccess || !noteContent) return;
+    if (!selectedPatient || !noteContent) return;
     try {
       await ledger.exercise(
         '#MedVault:DoctorAccess:DoctorAccess',
-        selectedAccess,
+        selectedPatient.contractId,
         'CreateDoctorNote',
         { noteType, content: noteContent }
       );
@@ -98,16 +117,6 @@ const DoctorDashboard: React.FC = () => {
     }
   };
 
-  const selectedPatient = doctorAccesses.contracts.find((c: any) => c.contractId === selectedAccess) as any;
-
-  // Group lab results by patient
-  const labResultsByPatient: Record<string, any[]> = {};
-  labResultAccesses.contracts.forEach((c: any) => {
-    const p = c.payload.patient as string;
-    if (!labResultsByPatient[p]) labResultsByPatient[p] = [];
-    labResultsByPatient[p].push(c);
-  });
-
   return (
     <div>
       <Header as="h2">Doctor Dashboard</Header>
@@ -115,45 +124,47 @@ const DoctorDashboard: React.FC = () => {
       {error && <Message negative onDismiss={() => setError('')}>{error}</Message>}
       {success && <Message positive onDismiss={() => setSuccess('')}>{success}</Message>}
 
-      {doctorAccesses.contracts.length === 0 && labResultAccesses.contracts.length === 0 ? (
-        <Message info>No patient access grants or lab results found. Ask a patient to grant you access.</Message>
+      {doctorAccesses.contracts.length === 0 ? (
+        <Message info>No patient access grants found. Ask a patient to grant you access.</Message>
       ) : (
         <>
           {/* Patient Access Grants */}
-          {doctorAccesses.contracts.length > 0 && (
-            <Segment>
-              <Header as="h3">Patient Access Grants</Header>
-              <Card.Group>
-                {doctorAccesses.contracts.map((c: any) => (
-                  <Card
-                    key={c.contractId}
-                    color={selectedAccess === c.contractId ? 'blue' : undefined}
-                    onClick={() => setSelectedAccess(c.contractId)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <Card.Content>
-                      <Card.Header>{c.payload.patientInfo?.name}</Card.Header>
-                      <Card.Meta>Patient: {c.payload.patient}</Card.Meta>
-                      <Card.Description>
-                        Blood Type: {c.payload.patientInfo?.bloodType}
-                        {c.payload.expiresAt && (
-                          <div><Label size="tiny" color="blue">Expires: {c.payload.expiresAt}</Label></div>
-                        )}
-                      </Card.Description>
-                    </Card.Content>
-                  </Card>
-                ))}
-              </Card.Group>
-            </Segment>
-          )}
+          <Segment>
+            <Header as="h3">Patient Access Grants</Header>
+            <Card.Group>
+              {doctorAccesses.contracts.map((c: any) => (
+                <Card
+                  key={c.contractId}
+                  color={selectedPatientParty === c.payload.patient ? 'blue' : undefined}
+                  onClick={() => setSelectedPatientParty(c.payload.patient)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <Card.Content>
+                    <Card.Header>{c.payload.patientInfo?.name}</Card.Header>
+                    <Card.Meta>Patient: {c.payload.patient}</Card.Meta>
+                    <Card.Description>
+                      Blood Type: {c.payload.patientInfo?.bloodType}
+                      {c.payload.expiresAt && (
+                        <div><Label size="tiny" color="blue">Expires: {c.payload.expiresAt}</Label></div>
+                      )}
+                    </Card.Description>
+                  </Card.Content>
+                </Card>
+              ))}
+            </Card.Group>
+          </Segment>
 
           {/* Selected Patient Details */}
-          {selectedAccess && selectedPatient && (
+          {selectedPatientParty && selectedPatient && (
             <>
-              <MedicalHistoryView record={selectedPatient.payload} />
+              <MedicalHistoryView
+                record={selectedPatient.payload}
+                prescriptions={prescriptions.contracts.filter((c: any) => c.payload.patient === selectedPatientParty)}
+                labOrders={labOrders.contracts.filter((c: any) => c.payload.patient === selectedPatientParty)}
+              />
 
               {/* Doctor's clinical notes for this patient */}
-              {doctorNotes.contracts.filter((c: any) => c.payload.patient === selectedPatient.payload.patient).length > 0 && (
+              {doctorNotes.contracts.filter((c: any) => c.payload.patient === selectedPatientParty).length > 0 && (
                 <Segment>
                   <Header as="h3">Clinical Notes</Header>
                   <Table compact>
@@ -165,36 +176,11 @@ const DoctorDashboard: React.FC = () => {
                       </Table.Row>
                     </Table.Header>
                     <Table.Body>
-                      {doctorNotes.contracts.filter((c: any) => c.payload.patient === selectedPatient.payload.patient).map((c: any) => (
+                      {doctorNotes.contracts.filter((c: any) => c.payload.patient === selectedPatientParty).map((c: any) => (
                         <Table.Row key={c.contractId}>
                           <Table.Cell><Label>{c.payload.noteType}</Label></Table.Cell>
                           <Table.Cell>{c.payload.content}</Table.Cell>
                           <Table.Cell>{c.payload.createdAt}</Table.Cell>
-                        </Table.Row>
-                      ))}
-                    </Table.Body>
-                  </Table>
-                </Segment>
-              )}
-
-              {/* Lab results for this patient */}
-              {labResultsByPatient[selectedPatient.payload.patient]?.length > 0 && (
-                <Segment>
-                  <Header as="h3">Lab Results for {selectedPatient.payload.patientInfo?.name}</Header>
-                  <Table compact>
-                    <Table.Header>
-                      <Table.Row>
-                        <Table.HeaderCell>Type</Table.HeaderCell>
-                        <Table.HeaderCell>Date</Table.HeaderCell>
-                        <Table.HeaderCell>Findings</Table.HeaderCell>
-                      </Table.Row>
-                    </Table.Header>
-                    <Table.Body>
-                      {labResultsByPatient[selectedPatient.payload.patient].map((c: any) => (
-                        <Table.Row key={c.contractId}>
-                          <Table.Cell><Label>{c.payload.labResult?.labType}</Label></Table.Cell>
-                          <Table.Cell>{c.payload.labResult?.resultDate}</Table.Cell>
-                          <Table.Cell>{c.payload.labResult?.findings}</Table.Cell>
                         </Table.Row>
                       ))}
                     </Table.Body>
@@ -255,33 +241,6 @@ const DoctorDashboard: React.FC = () => {
                 </Form>
               </Segment>
             </>
-          )}
-
-          {/* Lab Results (not tied to a selected patient) */}
-          {!selectedAccess && labResultAccesses.contracts.length > 0 && (
-            <Segment>
-              <Header as="h3">Shared Lab Results</Header>
-              <Table compact>
-                <Table.Header>
-                  <Table.Row>
-                    <Table.HeaderCell>Patient</Table.HeaderCell>
-                    <Table.HeaderCell>Type</Table.HeaderCell>
-                    <Table.HeaderCell>Date</Table.HeaderCell>
-                    <Table.HeaderCell>Findings</Table.HeaderCell>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {labResultAccesses.contracts.map((c: any) => (
-                    <Table.Row key={c.contractId}>
-                      <Table.Cell>{c.payload.patient}</Table.Cell>
-                      <Table.Cell><Label>{c.payload.labResult?.labType}</Label></Table.Cell>
-                      <Table.Cell>{c.payload.labResult?.resultDate}</Table.Cell>
-                      <Table.Cell>{c.payload.labResult?.findings}</Table.Cell>
-                    </Table.Row>
-                  ))}
-                </Table.Body>
-              </Table>
-            </Segment>
           )}
         </>
       )}

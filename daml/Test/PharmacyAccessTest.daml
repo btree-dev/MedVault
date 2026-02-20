@@ -2,6 +2,7 @@ module Test.PharmacyAccessTest where
 
 import Types
 import HealthRecord
+import AccessGrants
 import PharmacyAccess
 import DA.Date hiding (date)
 import DA.Time
@@ -40,12 +41,18 @@ test_pharmacyAccessAndDispensing = do
       illnesses = []
       diagnosticHistory = []
       prescriptionHistory = []
+      dispenseHistory = []
       immunizations = []
       familyHistory = []
 
+  accessManager <- submit patient do
+    createCmd PatientAccessManager with
+      patient = patient
+
   -- Grant doctor access and create prescription
   doctorAccess <- submit patient do
-    exerciseCmd healthRecord GrantDoctorAccess with
+    exerciseCmd accessManager GrantDoctorAccess with
+      healthRecordCid = healthRecord
       doctor = drSmith
       duration = Days30
 
@@ -61,12 +68,15 @@ test_pharmacyAccessAndDispensing = do
 
   -- 8. Patient grants pharmacy access to prescription
   pharmacyAccess <- submit patient do
-    exerciseCmd healthRecord GrantPharmacyAccess with
+    exerciseCmd accessManager GrantPharmacyAccess with
+      healthRecordCid = healthRecord
       pharmacy = pharmacy
       prescriptionCid = prescription
 
-  -- 9. Pharmacy acknowledges dispensing
-  submit pharmacy do
-    exerciseCmd pharmacyAccess AcknowledgeDispensing with dispensingNote = "Dispensed as prescribed"
+  -- 9. Pharmacy acknowledges dispensing (creates DispenseEntry)
+  _dispenseEntry <- submit pharmacy do
+    exerciseCmd pharmacyAccess AcknowledgeDispensing with
+      dispensingNote = "Dispensed as prescribed"
+      markAsFilled = True
 
   return ()

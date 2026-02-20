@@ -17,12 +17,14 @@ const PatientDashboard: React.FC = () => {
 
   const healthRecords = useStreamQueries('#MedVault:HealthRecord:HealthRecord');
   const invites = useStreamQueries('#MedVault:Operator:PatientInvite');
+  const accessManagers = useStreamQueries('#MedVault:AccessGrants:PatientAccessManager');
   const doctorAccesses = useStreamQueries('#MedVault:DoctorAccess:DoctorAccess');
   const pharmacyAccesses = useStreamQueries('#MedVault:PharmacyAccess:PharmacyAccess');
   const diagnosticAccesses = useStreamQueries('#MedVault:DiagnosticAccess:DiagnosticAccess');
   const prescriptions = useStreamQueries('#MedVault:Prescription:Prescription');
   const labOrders = useStreamQueries('#MedVault:LabOrder:LabOrder');
   const labResults = useStreamQueries('#MedVault:LabResults:LabResultReport');
+  const dispenseEntries = useStreamQueries('#MedVault:PharmacyAccess:DispenseEntry');
   const doctorNotes = useStreamQueries('#MedVault:DoctorNote:DoctorNote');
 
   const [doctorParty, setDoctorParty] = useState('');
@@ -41,10 +43,6 @@ const PatientDashboard: React.FC = () => {
   // Diagnostic access granting
   const [labParty, setLabParty] = useState('');
   const [selectedLabOrder, setSelectedLabOrder] = useState('');
-
-  // Share lab results with doctor
-  const [labResultDoctor, setLabResultDoctor] = useState('');
-  const [selectedLabResult, setSelectedLabResult] = useState('');
 
   const acceptInvite = async (contractId: string) => {
     if (!patientName || !dateOfBirth) {
@@ -76,13 +74,15 @@ const PatientDashboard: React.FC = () => {
   const grantDoctorAccess = async () => {
     if (!doctorParty) return;
     try {
+      const manager = accessManagers.contracts[0];
+      if (!manager) { setError('No access manager found'); return; }
       const record = healthRecords.contracts[0];
       if (!record) { setError('No health record found'); return; }
       await ledger.exercise(
-        '#MedVault:HealthRecord:HealthRecord',
-        record.contractId,
+        '#MedVault:AccessGrants:PatientAccessManager',
+        manager.contractId,
         'GrantDoctorAccess',
-        { doctor: doctorParty, duration }
+        { healthRecordCid: record.contractId, doctor: doctorParty, duration }
       );
       setDoctorParty('');
       setSuccess('Doctor access granted');
@@ -99,13 +99,15 @@ const PatientDashboard: React.FC = () => {
       return;
     }
     try {
+      const manager = accessManagers.contracts[0];
+      if (!manager) { setError('No access manager found'); return; }
       const record = healthRecords.contracts[0];
       if (!record) { setError('No health record found'); return; }
       await ledger.exercise(
-        '#MedVault:HealthRecord:HealthRecord',
-        record.contractId,
+        '#MedVault:AccessGrants:PatientAccessManager',
+        manager.contractId,
         'GrantPharmacyAccess',
-        { pharmacy: pharmacyParty, prescriptionCid: selectedPrescription }
+        { healthRecordCid: record.contractId, pharmacy: pharmacyParty, prescriptionCid: selectedPrescription }
       );
       setPharmacyParty('');
       setSelectedPrescription('');
@@ -123,13 +125,15 @@ const PatientDashboard: React.FC = () => {
       return;
     }
     try {
+      const manager = accessManagers.contracts[0];
+      if (!manager) { setError('No access manager found'); return; }
       const record = healthRecords.contracts[0];
       if (!record) { setError('No health record found'); return; }
       await ledger.exercise(
-        '#MedVault:HealthRecord:HealthRecord',
-        record.contractId,
+        '#MedVault:AccessGrants:PatientAccessManager',
+        manager.contractId,
         'GrantDiagnosticAccess',
-        { diagnosticCenter: labParty, labOrderCid: selectedLabOrder }
+        { healthRecordCid: record.contractId, diagnosticCenter: labParty, labOrderCid: selectedLabOrder }
       );
       setLabParty('');
       setSelectedLabOrder('');
@@ -141,45 +145,19 @@ const PatientDashboard: React.FC = () => {
     }
   };
 
-  const shareLabResultWithDoctor = async () => {
-    if (!labResultDoctor || !selectedLabResult) {
-      setError('Select a lab result and enter doctor party ID');
-      return;
-    }
-    try {
-      await ledger.exercise(
-        '#MedVault:LabResults:LabResultReport',
-        selectedLabResult,
-        'GrantDoctorLabResultAccess',
-        { doctor: labResultDoctor }
-      );
-      setLabResultDoctor('');
-      setSelectedLabResult('');
-      setSuccess('Lab result shared with doctor');
-      setError('');
-    } catch (e: any) {
-      setError(e.message);
-      setSuccess('');
-    }
-  };
-
   const record = healthRecords.contracts[0]?.payload;
 
-  const prescriptionOptions = prescriptions.contracts.map((c: any) => ({
-    key: c.contractId,
-    text: `${c.payload.medication?.name} — ${c.payload.medication?.dosage} (by ${c.payload.doctor})`,
-    value: c.contractId,
-  }));
+  const prescriptionOptions = prescriptions.contracts
+    .filter((c: any) => !c.payload.filled)
+    .map((c: any) => ({
+      key: c.contractId,
+      text: `${c.payload.medication?.name} — ${c.payload.medication?.dosage} (by ${c.payload.doctor})`,
+      value: c.contractId,
+    }));
 
   const labOrderOptions = labOrders.contracts.map((c: any) => ({
     key: c.contractId,
     text: `${c.payload.labType} — ${c.payload.reason} (by ${c.payload.doctor})`,
-    value: c.contractId,
-  }));
-
-  const labResultOptions = labResults.contracts.map((c: any) => ({
-    key: c.contractId,
-    text: `${c.payload.labResult?.labType} — ${c.payload.labResult?.resultDate} (by ${c.payload.diagnosticCenter})`,
     value: c.contractId,
   }));
 
@@ -217,7 +195,13 @@ const PatientDashboard: React.FC = () => {
 
       {/* Health Record */}
       {record ? (
-        <MedicalHistoryView record={record} />
+        <MedicalHistoryView
+          record={record}
+          prescriptions={prescriptions.contracts}
+          dispenseEntries={dispenseEntries.contracts}
+          labOrders={labOrders.contracts}
+          labResults={labResults.contracts}
+        />
       ) : (
         !invites.contracts.length && <Message info>No health record found. Ask your operator to send you an invite.</Message>
       )}
@@ -276,6 +260,8 @@ const PatientDashboard: React.FC = () => {
                     <Table.HeaderCell>Frequency</Table.HeaderCell>
                     <Table.HeaderCell>Prescribed By</Table.HeaderCell>
                     <Table.HeaderCell>Notes</Table.HeaderCell>
+                    <Table.HeaderCell>Dispensing</Table.HeaderCell>
+                    <Table.HeaderCell>Course</Table.HeaderCell>
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
@@ -286,6 +272,31 @@ const PatientDashboard: React.FC = () => {
                       <Table.Cell>{c.payload.medication?.frequency}</Table.Cell>
                       <Table.Cell>{c.payload.doctor}</Table.Cell>
                       <Table.Cell>{c.payload.notes}</Table.Cell>
+                      <Table.Cell>
+                        <Label color={c.payload.filled ? 'green' : 'orange'} size="tiny">
+                          {c.payload.filled ? 'Filled' : 'Pending'}
+                        </Label>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Button
+                          size="tiny"
+                          color={c.payload.courseCompleted ? 'grey' : 'blue'}
+                          onClick={async () => {
+                            try {
+                              await ledger.exercise(
+                                '#MedVault:Prescription:Prescription',
+                                c.contractId,
+                                'SetCourseStatus',
+                                { completed: !c.payload.courseCompleted }
+                              );
+                            } catch (e: any) {
+                              setError(e.message);
+                            }
+                          }}
+                        >
+                          {c.payload.courseCompleted ? 'Completed' : 'Active'}
+                        </Button>
+                      </Table.Cell>
                     </Table.Row>
                   ))}
                 </Table.Body>
@@ -340,7 +351,7 @@ const PatientDashboard: React.FC = () => {
             </Segment>
           )}
 
-          {/* Lab Results & Share with Doctor */}
+          {/* Lab Results (view only, no sharing needed — doctor sees via DoctorAccess snapshot) */}
           {labResults.contracts.length > 0 && (
             <Segment>
               <Header as="h3">Lab Results</Header>
@@ -357,17 +368,6 @@ const PatientDashboard: React.FC = () => {
                   </Card>
                 ))}
               </Card.Group>
-
-              <Divider />
-              <Header as="h4">Share Lab Results with Doctor</Header>
-              <Form>
-                <Form.Field>
-                  <label>Select Lab Result</label>
-                  <Dropdown selection placeholder="Choose a lab result..." options={labResultOptions} value={selectedLabResult} onChange={(_, { value }) => setSelectedLabResult(value as string)} />
-                </Form.Field>
-                <Form.Input label="Doctor Party ID" placeholder="e.g. DrJones::12345..." value={labResultDoctor} onChange={(_, { value }) => setLabResultDoctor(value)} />
-                <Button color="teal" onClick={shareLabResultWithDoctor}>Share with Doctor</Button>
-              </Form>
             </Segment>
           )}
         </>

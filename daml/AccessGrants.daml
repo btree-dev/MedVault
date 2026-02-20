@@ -1,0 +1,89 @@
+module AccessGrants where
+
+import Types
+import HealthRecord
+import DoctorAccess
+import PharmacyAccess
+import DiagnosticAccess
+import Prescription
+import LabOrder
+import DA.Time
+
+-- Patient's access manager for granting access to doctors, pharmacies, and labs
+template PatientAccessManager
+  with
+    patient : Party
+  where
+    signatory patient
+
+    nonconsuming choice GrantDoctorAccess
+      : ContractId DoctorAccess
+      with
+        healthRecordCid : ContractId HealthRecord
+        doctor : Party
+        duration : AccessDuration
+      controller patient
+      do
+        hr <- fetch healthRecordCid
+        assertMsg "Health record must belong to this patient" (hr.patient == patient)
+        now <- getTime
+        let
+          expiry = case duration of
+            Days30 -> Some (addRelTime now (days 30))
+            Days60 -> Some (addRelTime now (days 60))
+            Indefinite -> None
+        create DoctorAccess with
+          patient = patient
+          doctor = doctor
+          patientInfo = hr.patientInfo
+          allergies = hr.allergies
+          conditions = hr.conditions
+          medications = hr.medications
+          surgeries = hr.surgeries
+          illnesses = hr.illnesses
+          diagnosticHistory = hr.diagnosticHistory
+          prescriptionHistory = hr.prescriptionHistory
+          dispenseHistory = hr.dispenseHistory
+          immunizations = hr.immunizations
+          familyHistory = hr.familyHistory
+          grantedAt = now
+          expiresAt = expiry
+
+    nonconsuming choice GrantPharmacyAccess
+      : ContractId PharmacyAccess
+      with
+        healthRecordCid : ContractId HealthRecord
+        pharmacy : Party
+        prescriptionCid : ContractId Prescription
+      controller patient
+      do
+        hr <- fetch healthRecordCid
+        assertMsg "Health record must belong to this patient" (hr.patient == patient)
+        prescription <- fetch prescriptionCid
+        assertMsg "Prescription must belong to this patient" (prescription.patient == patient)
+        assertMsg "Prescription has already been filled" (not prescription.filled)
+        updatedPrescriptionCid <- exercise prescriptionCid AddObserver with newObserver = pharmacy
+        create PharmacyAccess with
+          patient = patient
+          pharmacy = pharmacy
+          prescription = prescription
+          prescriptionCid = updatedPrescriptionCid
+          allergies = hr.allergies
+          medications = hr.medications
+
+    nonconsuming choice GrantDiagnosticAccess
+      : ContractId DiagnosticAccess
+      with
+        healthRecordCid : ContractId HealthRecord
+        diagnosticCenter : Party
+        labOrderCid : ContractId LabOrder
+      controller patient
+      do
+        hr <- fetch healthRecordCid
+        assertMsg "Health record must belong to this patient" (hr.patient == patient)
+        labOrder <- fetch labOrderCid
+        assertMsg "Lab order must belong to this patient" (labOrder.patient == patient)
+        create DiagnosticAccess with
+          patient = patient
+          diagnosticCenter = diagnosticCenter
+          labOrder = labOrder

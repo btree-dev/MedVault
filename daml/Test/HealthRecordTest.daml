@@ -72,6 +72,7 @@ test_healthRecordCreationAndUpdate = do
             notes = "For pneumonia treatment"
             active = False
         ]
+      dispenseHistory = []
       immunizations =
         [ Immunization with
             name = "COVID-19 Pfizer"
@@ -158,6 +159,7 @@ test_healthRecordCreationAndUpdate = do
             notes = "For pneumonia treatment"
             active = False
         ]
+      newDispenseHistory = []
       newImmunizations =
         [ Immunization with
             name = "COVID-19 Pfizer"

@@ -104,3 +104,11 @@ data LabResult = LabResult with
   findings : Text
   resultDate : Date
     deriving (Eq, Show)
+
+data DispenseRecord = DispenseRecord with
+  medication : Text
+  dosage : Text
+  dispensedDate : Date
+  pharmacy : Text
+  dispensingNote : Text
+    deriving (Eq, Show)

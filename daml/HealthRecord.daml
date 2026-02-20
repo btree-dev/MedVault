@@ -1,13 +1,7 @@
 module HealthRecord where
 
 import Types
-import Prescription
-import LabOrder
-import DoctorAccess
-import PharmacyAccess
-import DiagnosticAccess
 import DA.Text as T
-import DA.Time
 
 -- Core patient health record with full medical history
 template HealthRecord
@@ -21,6 +15,7 @@ template HealthRecord
     illnesses : [Illness]
     diagnosticHistory : [DiagnosticRecord]
     prescriptionHistory : [PrescriptionRecord]
+    dispenseHistory : [DispenseRecord]
     immunizations : [Immunization]
     familyHistory : [FamilyHistory]
   where
@@ -39,6 +34,7 @@ template HealthRecord
         newIllnesses : [Illness]
         newDiagnosticHistory : [DiagnosticRecord]
         newPrescriptionHistory : [PrescriptionRecord]
+        newDispenseHistory : [DispenseRecord]
         newImmunizations : [Immunization]
         newFamilyHistory : [FamilyHistory]
       controller patient
@@ -52,64 +48,48 @@ template HealthRecord
           illnesses = newIllnesses
           diagnosticHistory = newDiagnosticHistory
           prescriptionHistory = newPrescriptionHistory
+          dispenseHistory = newDispenseHistory
           immunizations = newImmunizations
           familyHistory = newFamilyHistory
 
-    nonconsuming choice GrantDoctorAccess
-      : ContractId DoctorAccess
+    -- Append a prescription to history (used by DoctorAccess.CreatePrescription)
+    choice RecordPrescriptionInHistory
+      : ContractId HealthRecord
       with
-        doctor : Party
-        duration : AccessDuration
+        prescriptionRecord : PrescriptionRecord
+        newMedication : Medication
       controller patient
       do
-        now <- getTime
-        let
-          expiry = case duration of
-            Days30 -> Some (addRelTime now (days 30))
-            Days60 -> Some (addRelTime now (days 60))
-            Indefinite -> None
-        create DoctorAccess with
-          patient = patient
-          doctor = doctor
-          patientInfo = patientInfo
-          allergies = allergies
-          conditions = conditions
-          medications = medications
-          surgeries = surgeries
-          illnesses = illnesses
-          diagnosticHistory = diagnosticHistory
-          prescriptionHistory = prescriptionHistory
-          immunizations = immunizations
-          familyHistory = familyHistory
-          grantedAt = now
-          expiresAt = expiry
+        create this with
+          prescriptionHistory = prescriptionRecord :: prescriptionHistory
+          medications = newMedication :: medications
 
-    nonconsuming choice GrantPharmacyAccess
-      : ContractId PharmacyAccess
+    -- Append a lab order to diagnostic history (used by DoctorAccess.CreateLabOrder)
+    choice RecordLabOrderInHistory
+      : ContractId HealthRecord
       with
-        pharmacy : Party
-        prescriptionCid : ContractId Prescription
+        diagnosticRecord : DiagnosticRecord
       controller patient
       do
-        prescription <- fetch prescriptionCid
-        assertMsg "Prescription must belong to this patient" (prescription.patient == patient)
-        create PharmacyAccess with
-          patient = patient
-          pharmacy = pharmacy
-          prescription = prescription
-          allergies = allergies
-          medications = medications
+        create this with
+          diagnosticHistory = diagnosticRecord :: diagnosticHistory
 
-    nonconsuming choice GrantDiagnosticAccess
-      : ContractId DiagnosticAccess
+    -- Append a dispensing record to history (used by PharmacyAccess.AcknowledgeDispensing)
+    choice RecordDispensingInHistory
+      : ContractId HealthRecord
       with
-        diagnosticCenter : Party
-        labOrderCid : ContractId LabOrder
+        dispenseRecord : DispenseRecord
       controller patient
       do
-        labOrder <- fetch labOrderCid
-        assertMsg "Lab order must belong to this patient" (labOrder.patient == patient)
-        create DiagnosticAccess with
-          patient = patient
-          diagnosticCenter = diagnosticCenter
-          labOrder = labOrder
+        create this with
+          dispenseHistory = dispenseRecord :: dispenseHistory
+
+    -- Append a lab result to diagnostic history (used by DiagnosticAccess.SubmitLabResults)
+    choice RecordLabResultInHistory
+      : ContractId HealthRecord
+      with
+        diagnosticRecord : DiagnosticRecord
+      controller patient
+      do
+        create this with
+          diagnosticHistory = diagnosticRecord :: diagnosticHistory

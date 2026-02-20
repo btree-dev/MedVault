@@ -23,7 +23,7 @@ test_operatorInviteAccept = do
     exerciseCmd operatorContract InvitePatient with
       patient = patient
 
-  -- Patient accepts and creates health record
+  -- Patient accepts and creates health record (also creates PatientAccessManager)
   _healthRecord <- submit patient do
     exerciseCmd invite AcceptInvite with
       patientInfo = PatientInfo with
