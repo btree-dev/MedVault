@@ -20,6 +20,7 @@ test_labResultsRecordedInHistory = do
   healthRecord <- submit patient do
     createCmd HealthRecord with
       patient = patient
+      authorizedParties = []
       patientInfo = PatientInfo with
         name = "Alice Johnson"
         dateOfBirth = mkDate 1985 Jun 12
@@ -47,33 +48,34 @@ test_labResultsRecordedInHistory = do
       doctor = drSmith
       duration = Days30
 
+  [(hrCid1, _)] <- query @HealthRecord patient
+
   labOrder <- submit drSmith do
     exerciseCmd doctorAccess CreateLabOrder with
       labType = BloodWork
       reason = "Routine blood panel"
+      healthRecordCid = hrCid1
+
+  [(hrCid2, _)] <- query @HealthRecord patient
 
   diagnosticAccess <- submit patient do
     exerciseCmd accessManager GrantDiagnosticAccess with
-      healthRecordCid = healthRecord
+      healthRecordCid = hrCid2
       diagnosticCenter = labCorp
       labOrderCid = labOrder
 
-  -- Submit lab results
+  [(hrCid3, _)] <- query @HealthRecord patient
+
+  -- Submit lab results (this now also records in HealthRecord history)
   _labReport <- submit labCorp do
     exerciseCmd diagnosticAccess SubmitLabResults with
       findings = "CBC normal. Cholesterol slightly elevated at 210."
       resultDate = mkDate 2025 Jan 20
+      healthRecordCid = hrCid3
 
   -- 13. Verify the lab result report was created
-  -- (Re-grant doctor access to check the snapshot)
-  doctorAccess2 <- submit patient do
-    exerciseCmd accessManager GrantDoctorAccess with
-      healthRecordCid = healthRecord
-      doctor = drSmith
-      duration = Days30
-
-  -- 14. Revoke doctor access
+  -- 14. Revoke the doctor access
   submit patient do
-    exerciseCmd doctorAccess2 RevokeDoctorAccess
+    exerciseCmd doctorAccess RevokeDoctorAccess
 
   return ()

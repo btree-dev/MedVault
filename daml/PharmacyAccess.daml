@@ -2,8 +2,8 @@ module PharmacyAccess where
 
 import Types
 import Prescription
+import HealthRecord
 import DA.Date (toDateUTC)
-import DA.Time
 import DA.Action (when)
 
 -- Pharmacy access to prescription + relevant patient data
@@ -30,21 +30,25 @@ template PharmacyAccess
       with
         dispensingNote : Text
         markAsFilled : Bool
+        healthRecordCid : ContractId HealthRecord
       controller pharmacy
       do
         now <- getTime
         when markAsFilled do
           exercise prescriptionCid MarkFilled
           pure ()
+        let dr = DispenseRecord with
+              medication = prescription.medication.name
+              dosage = prescription.medication.dosage
+              dispensedDate = toDateUTC now
+              pharmacy = show pharmacy
+              dispensingNote = dispensingNote
+        exercise healthRecordCid RecordDispensingInHistory with
+          dispenseRecord = dr
         create DispenseEntry with
           patient = patient
           pharmacy = pharmacy
-          dispenseRecord = DispenseRecord with
-            medication = prescription.medication.name
-            dosage = prescription.medication.dosage
-            dispensedDate = toDateUTC now
-            pharmacy = show pharmacy
-            dispensingNote = dispensingNote
+          dispenseRecord = dr
           createdAt = now
 
 -- Standalone dispensing record (queryable by patient)

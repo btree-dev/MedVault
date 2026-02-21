@@ -63,8 +63,6 @@ test_fullWorkflow = do
       timestamp = now
 
   -- Patient creates access manager (AcceptInvite already creates one, but we need the cid)
-  -- Note: AcceptInvite creates a PatientAccessManager but doesn't return it.
-  -- In a real scenario, the patient would query for it. For testing, create one.
   accessManager <- submit patient do
     createCmd PatientAccessManager with
       patient = patient
@@ -107,7 +105,9 @@ test_fullWorkflow = do
       doctor = doctor
       duration = Days30
 
-  -- 6. Doctor creates prescription
+  [(hrCid1, _)] <- query @HealthRecord patient
+
+  -- 6. Doctor creates prescription (nonconsuming)
   prescription <- submit doctor do
     exerciseCmd doctorAccess CreatePrescription with
       medication = Medication with
@@ -117,14 +117,20 @@ test_fullWorkflow = do
         prescribedDate = mkDate 2025 Jan 15
         prescribedBy = "DrSmith"
       notes = "For bacterial infection. Avoid penicillin due to allergy."
+      healthRecordCid = hrCid1
 
-  -- 7. Doctor creates lab order
+  [(hrCid2, _)] <- query @HealthRecord patient
+
+  -- 7. Doctor creates lab order (nonconsuming, same DoctorAccess)
   labOrder <- submit doctor do
     exerciseCmd doctorAccess CreateLabOrder with
       labType = BloodWork
       reason = "Routine blood panel for hypertension monitoring"
+      healthRecordCid = hrCid2
 
-  -- 8. Doctor creates clinical note
+  [(hrCid3, _)] <- query @HealthRecord patient
+
+  -- 8. Doctor creates clinical note (nonconsuming, no HR update needed)
   _note <- submit doctor do
     exerciseCmd doctorAccess CreateDoctorNote with
       noteType = "Diagnosis"
@@ -133,28 +139,36 @@ test_fullWorkflow = do
   -- 9. Patient grants pharmacy access
   pharmacyAccess <- submit patient do
     exerciseCmd accessManager GrantPharmacyAccess with
-      healthRecordCid = healthRecord2
+      healthRecordCid = hrCid3
       pharmacy = pharmacy
       prescriptionCid = prescription
+
+  [(hrCid4, _)] <- query @HealthRecord patient
 
   -- 10. Pharmacy dispenses medication
   _dispenseEntry <- submit pharmacy do
     exerciseCmd pharmacyAccess AcknowledgeDispensing with
       dispensingNote = "Dispensed 21 tablets (7-day course)"
       markAsFilled = True
+      healthRecordCid = hrCid4
+
+  [(hrCid5, _)] <- query @HealthRecord patient
 
   -- 11. Patient grants diagnostic center access
   diagnosticAccess <- submit patient do
     exerciseCmd accessManager GrantDiagnosticAccess with
-      healthRecordCid = healthRecord2
+      healthRecordCid = hrCid5
       diagnosticCenter = lab
       labOrderCid = labOrder
+
+  [(hrCid6, _)] <- query @HealthRecord patient
 
   -- 12. Lab submits results
   _labReport <- submit lab do
     exerciseCmd diagnosticAccess SubmitLabResults with
       findings = "CBC normal. Cholesterol slightly elevated at 210. Recommend dietary changes."
       resultDate = mkDate 2025 Jan 20
+      healthRecordCid = hrCid6
 
   -- 13. Log final audit events
   _auditEvent3 <- submit operator do

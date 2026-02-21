@@ -26,6 +26,8 @@ template PatientAccessManager
       do
         hr <- fetch healthRecordCid
         assertMsg "Health record must belong to this patient" (hr.patient == patient)
+        -- Add doctor as authorized observer so they can see the HealthRecord
+        exercise healthRecordCid AddAuthorizedParty with newParty = doctor
         now <- getTime
         let
           expiry = case duration of
@@ -63,6 +65,8 @@ template PatientAccessManager
         assertMsg "Prescription must belong to this patient" (prescription.patient == patient)
         assertMsg "Prescription has already been filled" (not prescription.filled)
         updatedPrescriptionCid <- exercise prescriptionCid AddObserver with newObserver = pharmacy
+        -- Add pharmacy as authorized observer so they can see the HealthRecord
+        exercise healthRecordCid AddAuthorizedParty with newParty = pharmacy
         create PharmacyAccess with
           patient = patient
           pharmacy = pharmacy
@@ -83,6 +87,8 @@ template PatientAccessManager
         assertMsg "Health record must belong to this patient" (hr.patient == patient)
         labOrder <- fetch labOrderCid
         assertMsg "Lab order must belong to this patient" (labOrder.patient == patient)
+        -- Add diagnostic center as authorized observer so they can see the HealthRecord
+        exercise healthRecordCid AddAuthorizedParty with newParty = diagnosticCenter
         create DiagnosticAccess with
           patient = patient
           diagnosticCenter = diagnosticCenter

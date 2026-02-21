@@ -17,6 +17,7 @@ test_healthRecordCreationAndUpdate = do
   healthRecord <- submit patient do
     createCmd HealthRecord with
       patient = patient
+      authorizedParties = []
       patientInfo = PatientInfo with
         name = "Alice Johnson"
         dateOfBirth = mkDate 1985 Jun 12

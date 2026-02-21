@@ -7,6 +7,7 @@ import DA.Text as T
 template HealthRecord
   with
     patient : Party
+    authorizedParties : [Party]
     patientInfo : PatientInfo
     allergies : [Allergy]
     conditions : [Condition]
@@ -20,8 +21,27 @@ template HealthRecord
     familyHistory : [FamilyHistory]
   where
     signatory patient
+    observer authorizedParties
 
     ensure T.length patientInfo.name > 0
+
+    -- Add a party as an authorized observer (used when granting access)
+    choice AddAuthorizedParty
+      : ContractId HealthRecord
+      with
+        newParty : Party
+      controller patient
+      do
+        create this with authorizedParties = newParty :: authorizedParties
+
+    -- Remove a party from authorized observers (used when revoking access)
+    choice RemoveAuthorizedParty
+      : ContractId HealthRecord
+      with
+        partyToRemove : Party
+      controller patient
+      do
+        create this with authorizedParties = filter (/= partyToRemove) authorizedParties
 
     choice UpdateRecord
       : ContractId HealthRecord

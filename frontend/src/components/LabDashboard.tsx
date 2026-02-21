@@ -8,18 +8,21 @@ const LabDashboard: React.FC = () => {
 
   const diagnosticAccesses = useStreamQueries('#MedVault:DiagnosticAccess:DiagnosticAccess');
   const labResults = useStreamQueries('#MedVault:LabResults:LabResultReport');
+  const healthRecords = useStreamQueries('#MedVault:HealthRecord:HealthRecord');
 
   const [findings, setFindings] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const submitResults = async (contractId: string) => {
+  const submitResults = async (contractId: string, patientParty: string) => {
     const f = findings[contractId];
     if (!f) {
       setError('Please enter findings before submitting');
       return;
     }
     try {
+      const hrContract = healthRecords.contracts.find((c: any) => c.payload.patient === patientParty);
+      if (!hrContract) { setError('No health record found for patient'); return; }
       await ledger.exercise(
         '#MedVault:DiagnosticAccess:DiagnosticAccess',
         contractId,
@@ -27,6 +30,7 @@ const LabDashboard: React.FC = () => {
         {
           findings: f,
           resultDate: new Date().toISOString().split('T')[0],
+          healthRecordCid: hrContract.contractId,
         }
       );
       setFindings((prev) => ({ ...prev, [contractId]: '' }));
@@ -89,7 +93,7 @@ const LabDashboard: React.FC = () => {
                       placeholder="Enter detailed lab findings and results..."
                       rows={4}
                     />
-                    <Button primary onClick={() => submitResults(c.contractId)}>
+                    <Button primary onClick={() => submitResults(c.contractId, c.payload.patient)}>
                       Submit Results
                     </Button>
                   </Form>

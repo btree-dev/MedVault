@@ -15,6 +15,7 @@ const OperatorDashboard: React.FC = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [auditorParty, setAuditorParty] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     ledger.getPartyId('Auditor').then((p) => {
@@ -63,12 +64,13 @@ const OperatorDashboard: React.FC = () => {
   };
 
   const invitePatient = async () => {
-    if (!patientParty) return;
+    if (!patientParty || loading) return;
     const op = operators.contracts[0];
     if (!op) {
       setError('Create operator contract first');
       return;
     }
+    setLoading(true);
     try {
       await ledger.exercise(
         '#MedVault:Operator:Operator',
@@ -83,6 +85,8 @@ const OperatorDashboard: React.FC = () => {
     } catch (e: any) {
       setError(e.message);
       setSuccess('');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -108,7 +112,7 @@ const OperatorDashboard: React.FC = () => {
               value={patientParty}
               onChange={(_, { value }) => setPatientParty(value)}
             />
-            <Button primary onClick={invitePatient}>Send Invite</Button>
+            <Button primary onClick={invitePatient} loading={loading} disabled={loading}>Send Invite</Button>
           </Form>
         </Segment>
       )}

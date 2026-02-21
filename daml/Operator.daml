@@ -38,6 +38,7 @@ template PatientInvite
       do
         hrCid <- create HealthRecord with
           patient = patient
+          authorizedParties = []
           patientInfo = patientInfo
           allergies = []
           conditions = []

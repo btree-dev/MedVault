@@ -4,7 +4,8 @@ import Types
 import Prescription
 import LabOrder
 import DoctorNote
-import DA.Time
+import HealthRecord
+import DA.Date (toDateUTC)
 
 -- Time-limited doctor access to full patient medical history (point-in-time snapshot)
 template DoctorAccess
@@ -33,13 +34,14 @@ template DoctorAccess
       with
         medication : Medication
         notes : Text
+        healthRecordCid : ContractId HealthRecord
       controller doctor
       do
         now <- getTime
         case expiresAt of
           Some t -> assertMsg "Doctor access has expired" (now <= t)
           None -> pure ()
-        create Prescription with
+        prescriptionCid <- create Prescription with
           patient = patient
           doctor = doctor
           medication = medication
@@ -48,24 +50,42 @@ template DoctorAccess
           filled = False
           courseCompleted = False
           additionalObservers = []
+        exercise healthRecordCid RecordPrescriptionInHistory with
+          prescriptionRecord = PrescriptionRecord with
+            medication = medication.name
+            date = toDateUTC now
+            doctor = show doctor
+            notes = notes
+            active = True
+          newMedication = medication
+        return prescriptionCid
 
     nonconsuming choice CreateLabOrder
       : ContractId LabOrder
       with
         labType : LabType
         reason : Text
+        healthRecordCid : ContractId HealthRecord
       controller doctor
       do
         now <- getTime
         case expiresAt of
           Some t -> assertMsg "Doctor access has expired" (now <= t)
           None -> pure ()
-        create LabOrder with
+        labOrderCid <- create LabOrder with
           patient = patient
           doctor = doctor
           labType = labType
           reason = reason
           createdAt = now
+        exercise healthRecordCid RecordLabOrderInHistory with
+          diagnosticRecord = DiagnosticRecord with
+            diagType = show labType
+            date = toDateUTC now
+            facility = ""
+            findings = ""
+            orderedBy = show doctor
+        return labOrderCid
 
     nonconsuming choice CreateDoctorNote
       : ContractId DoctorNote
