@@ -119,7 +119,7 @@ const MedicalHistoryView: React.FC<Props> = ({ record, prescriptions, dispenseEn
         </Segment>
       )}
 
-      {allPrescriptionHistory.length > 0 && (
+      {allPrescriptionHistory.length > 0 && !prescriptions && (
         <Segment>
           <Header as="h4">Prescription History</Header>
           <Table compact>
