@@ -6,7 +6,7 @@ import DA.Date hiding (date)
 import DA.Time
 import Daml.Script
 
--- Test: Operator creates audit observer and logs events
+-- Test: Operator creates audit observer and logs multiple events
 test_auditEventLogging = do
   operator <- allocateParty "Operator"
   auditor <- allocateParty "Auditor"
@@ -55,6 +55,68 @@ test_unauthorizedCannotLogEvents = do
     exerciseCmd auditObserver LogEvent with
       eventType = "FAKE_EVENT"
       description = "This should not work"
+      timestamp = now
+
+  return ()
+
+-- Test: Auditor cannot log events (only operator can)
+test_auditorCannotLogEvents = do
+  operator <- allocateParty "Operator"
+  auditor <- allocateParty "Auditor"
+
+  setTime (time (mkDate 2025 Jan 15) 9 0 0)
+  now <- getTime
+
+  auditObserver <- submit operator do
+    createCmd AuditObserver with
+      operator = operator
+      auditor = auditor
+
+  submitMustFail auditor do
+    exerciseCmd auditObserver LogEvent with
+      eventType = "UNAUTHORIZED"
+      description = "Auditor should not be able to log events"
+      timestamp = now
+
+  return ()
+
+-- Test: AuditObserver is nonconsuming — multiple events from one observer
+test_auditObserverNonconsuming = do
+  operator <- allocateParty "Operator"
+  auditor <- allocateParty "Auditor"
+
+  setTime (time (mkDate 2025 Jan 15) 9 0 0)
+  now <- getTime
+
+  auditObserver <- submit operator do
+    createCmd AuditObserver with
+      operator = operator
+      auditor = auditor
+
+  -- Log several events in sequence — observer should not be consumed
+  _e1 <- submit operator do
+    exerciseCmd auditObserver LogEvent with
+      eventType = "PATIENT_INVITED"
+      description = "Invited patient Alice"
+      timestamp = now
+
+  _e2 <- submit operator do
+    exerciseCmd auditObserver LogEvent with
+      eventType = "PATIENT_INVITED"
+      description = "Invited patient Bob"
+      timestamp = now
+
+  _e3 <- submit operator do
+    exerciseCmd auditObserver LogEvent with
+      eventType = "OPERATOR_SETUP"
+      description = "Operator contract created"
+      timestamp = now
+
+  -- Observer still works after 3 events
+  _e4 <- submit operator do
+    exerciseCmd auditObserver LogEvent with
+      eventType = "PATIENT_ONBOARDED"
+      description = "Patient Alice accepted invite"
       timestamp = now
 
   return ()

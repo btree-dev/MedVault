@@ -78,3 +78,63 @@ test_diagnosticAccessAndResults = do
       resultDate = mkDate 2025 Jan 20
 
   return ()
+
+-- Test: Patient revokes diagnostic access before results are submitted
+test_revokeDiagnosticAccess = do
+  patient <- allocateParty "Alice"
+  drSmith <- allocateParty "DrSmith"
+  labCorp <- allocateParty "LabCorp"
+
+  setTime (time (mkDate 2025 Jan 15) 9 0 0)
+
+  healthRecord <- submit patient do
+    createCmd HealthRecord with
+      patient = patient
+      patientInfo = PatientInfo with
+        name = "Alice Johnson"
+        dateOfBirth = mkDate 1985 Jun 12
+        bloodType = "O+"
+        emergencyContact = "Bob Johnson (spouse) - 555-0123"
+      allergies = []
+      conditions = []
+      medications = []
+      surgeries = []
+      illnesses = []
+      diagnosticHistory = []
+      prescriptionHistory = []
+      dispenseHistory = []
+      immunizations = []
+      familyHistory = []
+
+  accessManager <- submit patient do
+    createCmd PatientAccessManager with
+      patient = patient
+
+  doctorAccess <- submit patient do
+    exerciseCmd accessManager GrantDoctorAccess with
+      healthRecordCid = healthRecord
+      doctor = drSmith
+      duration = Days30
+
+  labOrder <- submit drSmith do
+    exerciseCmd doctorAccess CreateLabOrder with
+      labType = MRI
+      reason = "Brain MRI for persistent headaches"
+
+  diagnosticAccess <- submit patient do
+    exerciseCmd accessManager GrantDiagnosticAccess with
+      healthRecordCid = healthRecord
+      diagnosticCenter = labCorp
+      labOrderCid = labOrder
+
+  -- Patient revokes diagnostic access
+  submit patient do
+    exerciseCmd diagnosticAccess RevokeDiagnosticAccess
+
+  -- Diagnostic center cannot submit results after revocation
+  submitMustFail labCorp do
+    exerciseCmd diagnosticAccess SubmitLabResults with
+      findings = "Should fail - access revoked"
+      resultDate = mkDate 2025 Jan 20
+
+  return ()

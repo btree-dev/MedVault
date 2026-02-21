@@ -80,3 +80,129 @@ test_pharmacyAccessAndDispensing = do
       markAsFilled = True
 
   return ()
+
+-- Test: Patient revokes pharmacy access before dispensing
+test_revokePharmacyAccess = do
+  patient <- allocateParty "Alice"
+  drSmith <- allocateParty "DrSmith"
+  pharmacy <- allocateParty "PharmaCorp"
+
+  setTime (time (mkDate 2025 Jan 15) 9 0 0)
+
+  healthRecord <- submit patient do
+    createCmd HealthRecord with
+      patient = patient
+      patientInfo = PatientInfo with
+        name = "Alice Johnson"
+        dateOfBirth = mkDate 1985 Jun 12
+        bloodType = "O+"
+        emergencyContact = "Bob Johnson (spouse) - 555-0123"
+      allergies = []
+      conditions = []
+      medications = []
+      surgeries = []
+      illnesses = []
+      diagnosticHistory = []
+      prescriptionHistory = []
+      dispenseHistory = []
+      immunizations = []
+      familyHistory = []
+
+  accessManager <- submit patient do
+    createCmd PatientAccessManager with
+      patient = patient
+
+  doctorAccess <- submit patient do
+    exerciseCmd accessManager GrantDoctorAccess with
+      healthRecordCid = healthRecord
+      doctor = drSmith
+      duration = Days30
+
+  prescription <- submit drSmith do
+    exerciseCmd doctorAccess CreatePrescription with
+      medication = Medication with
+        name = "Amoxicillin"
+        dosage = "500mg"
+        frequency = "3x daily"
+        prescribedDate = mkDate 2025 Jan 15
+        prescribedBy = "DrSmith"
+      notes = "For bacterial infection."
+
+  pharmacyAccess <- submit patient do
+    exerciseCmd accessManager GrantPharmacyAccess with
+      healthRecordCid = healthRecord
+      pharmacy = pharmacy
+      prescriptionCid = prescription
+
+  -- Patient revokes pharmacy access
+  submit patient do
+    exerciseCmd pharmacyAccess RevokePharmacyAccess
+
+  -- Pharmacy cannot dispense after revocation
+  submitMustFail pharmacy do
+    exerciseCmd pharmacyAccess AcknowledgeDispensing with
+      dispensingNote = "Should fail"
+      markAsFilled = False
+
+  return ()
+
+-- Test: Pharmacy dispenses without marking as filled
+test_pharmacyDispenseWithoutFilled = do
+  patient <- allocateParty "Alice"
+  drSmith <- allocateParty "DrSmith"
+  pharmacy <- allocateParty "PharmaCorp"
+
+  setTime (time (mkDate 2025 Jan 15) 9 0 0)
+
+  healthRecord <- submit patient do
+    createCmd HealthRecord with
+      patient = patient
+      patientInfo = PatientInfo with
+        name = "Alice Johnson"
+        dateOfBirth = mkDate 1985 Jun 12
+        bloodType = "O+"
+        emergencyContact = "Bob Johnson (spouse) - 555-0123"
+      allergies = []
+      conditions = []
+      medications = []
+      surgeries = []
+      illnesses = []
+      diagnosticHistory = []
+      prescriptionHistory = []
+      dispenseHistory = []
+      immunizations = []
+      familyHistory = []
+
+  accessManager <- submit patient do
+    createCmd PatientAccessManager with
+      patient = patient
+
+  doctorAccess <- submit patient do
+    exerciseCmd accessManager GrantDoctorAccess with
+      healthRecordCid = healthRecord
+      doctor = drSmith
+      duration = Days30
+
+  prescription <- submit drSmith do
+    exerciseCmd doctorAccess CreatePrescription with
+      medication = Medication with
+        name = "Ibuprofen"
+        dosage = "400mg"
+        frequency = "as needed"
+        prescribedDate = mkDate 2025 Jan 15
+        prescribedBy = "DrSmith"
+      notes = "For pain relief"
+
+  pharmacyAccess <- submit patient do
+    exerciseCmd accessManager GrantPharmacyAccess with
+      healthRecordCid = healthRecord
+      pharmacy = pharmacy
+      prescriptionCid = prescription
+
+  -- Pharmacy dispenses without marking as filled (partial fill)
+  _dispenseEntry <- submit pharmacy do
+    exerciseCmd pharmacyAccess AcknowledgeDispensing with
+      dispensingNote = "Partial fill - 15 tablets dispensed"
+      markAsFilled = False
+
+  return ()

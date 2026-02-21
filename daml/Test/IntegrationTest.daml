@@ -1,0 +1,172 @@
+module Test.IntegrationTest where
+
+import Types
+import Operator
+import HealthRecord
+import AccessGrants
+import DoctorAccess
+import PharmacyAccess
+import DiagnosticAccess
+import Audit
+import DA.Date hiding (date)
+import DA.Time
+import Daml.Script
+
+-- End-to-end test: Onboarding → doctor visit → prescription → pharmacy → lab → audit trail
+test_fullWorkflow = do
+  operator <- allocateParty "Operator"
+  patient <- allocateParty "Alice"
+  doctor <- allocateParty "DrSmith"
+  pharmacy <- allocateParty "PharmaCorp"
+  lab <- allocateParty "LabCorp"
+  auditor <- allocateParty "Auditor"
+
+  setTime (time (mkDate 2025 Jan 15) 9 0 0)
+  now <- getTime
+
+  -- 1. Operator sets up and creates audit observer
+  operatorContract <- submit operator do
+    createCmd Operator with
+      operator = operator
+
+  auditObserver <- submit operator do
+    createCmd AuditObserver with
+      operator = operator
+      auditor = auditor
+
+  -- 2. Operator invites patient
+  invite <- submit operator do
+    exerciseCmd operatorContract InvitePatient with
+      patient = patient
+
+  -- Log audit event for invite
+  _auditEvent1 <- submit operator do
+    exerciseCmd auditObserver LogEvent with
+      eventType = "PATIENT_INVITED"
+      description = "Invited patient Alice"
+      timestamp = now
+
+  -- 3. Patient accepts invite (creates HealthRecord + PatientAccessManager)
+  healthRecord <- submit patient do
+    exerciseCmd invite AcceptInvite with
+      patientInfo = PatientInfo with
+        name = "Alice Johnson"
+        dateOfBirth = mkDate 1985 Jun 12
+        bloodType = "O+"
+        emergencyContact = "Bob Johnson (spouse) - 555-0123"
+
+  -- Log audit event for onboarding
+  _auditEvent2 <- submit operator do
+    exerciseCmd auditObserver LogEvent with
+      eventType = "PATIENT_ONBOARDED"
+      description = "Patient Alice accepted invite and created health record"
+      timestamp = now
+
+  -- Patient creates access manager (AcceptInvite already creates one, but we need the cid)
+  -- Note: AcceptInvite creates a PatientAccessManager but doesn't return it.
+  -- In a real scenario, the patient would query for it. For testing, create one.
+  accessManager <- submit patient do
+    createCmd PatientAccessManager with
+      patient = patient
+
+  -- 4. Patient updates health record with medical history
+  healthRecord2 <- submit patient do
+    exerciseCmd healthRecord UpdateRecord with
+      newPatientInfo = PatientInfo with
+        name = "Alice Johnson"
+        dateOfBirth = mkDate 1985 Jun 12
+        bloodType = "O+"
+        emergencyContact = "Bob Johnson (spouse) - 555-0123"
+      newAllergies =
+        [ Allergy with name = "Penicillin"; severity = "severe"; reaction = "Anaphylaxis" ]
+      newConditions =
+        [ Condition with
+            name = "Hypertension"
+            diagnosedDate = mkDate 2020 Mar 1
+            status = "active"
+            notes = "Managed with medication" ]
+      newMedications =
+        [ Medication with
+            name = "Lisinopril"
+            dosage = "10mg"
+            frequency = "daily"
+            prescribedDate = mkDate 2020 Mar 15
+            prescribedBy = "Dr. Williams" ]
+      newSurgeries = []
+      newIllnesses = []
+      newDiagnosticHistory = []
+      newPrescriptionHistory = []
+      newDispenseHistory = []
+      newImmunizations = []
+      newFamilyHistory = []
+
+  -- 5. Patient grants doctor 30-day access
+  doctorAccess <- submit patient do
+    exerciseCmd accessManager GrantDoctorAccess with
+      healthRecordCid = healthRecord2
+      doctor = doctor
+      duration = Days30
+
+  -- 6. Doctor creates prescription
+  prescription <- submit doctor do
+    exerciseCmd doctorAccess CreatePrescription with
+      medication = Medication with
+        name = "Amoxicillin"
+        dosage = "500mg"
+        frequency = "3x daily"
+        prescribedDate = mkDate 2025 Jan 15
+        prescribedBy = "DrSmith"
+      notes = "For bacterial infection. Avoid penicillin due to allergy."
+
+  -- 7. Doctor creates lab order
+  labOrder <- submit doctor do
+    exerciseCmd doctorAccess CreateLabOrder with
+      labType = BloodWork
+      reason = "Routine blood panel for hypertension monitoring"
+
+  -- 8. Doctor creates clinical note
+  _note <- submit doctor do
+    exerciseCmd doctorAccess CreateDoctorNote with
+      noteType = "Diagnosis"
+      content = "Patient presents with bacterial infection. Prescribed Amoxicillin. Ordered blood panel."
+
+  -- 9. Patient grants pharmacy access
+  pharmacyAccess <- submit patient do
+    exerciseCmd accessManager GrantPharmacyAccess with
+      healthRecordCid = healthRecord2
+      pharmacy = pharmacy
+      prescriptionCid = prescription
+
+  -- 10. Pharmacy dispenses medication
+  _dispenseEntry <- submit pharmacy do
+    exerciseCmd pharmacyAccess AcknowledgeDispensing with
+      dispensingNote = "Dispensed 21 tablets (7-day course)"
+      markAsFilled = True
+
+  -- 11. Patient grants diagnostic center access
+  diagnosticAccess <- submit patient do
+    exerciseCmd accessManager GrantDiagnosticAccess with
+      healthRecordCid = healthRecord2
+      diagnosticCenter = lab
+      labOrderCid = labOrder
+
+  -- 12. Lab submits results
+  _labReport <- submit lab do
+    exerciseCmd diagnosticAccess SubmitLabResults with
+      findings = "CBC normal. Cholesterol slightly elevated at 210. Recommend dietary changes."
+      resultDate = mkDate 2025 Jan 20
+
+  -- 13. Log final audit events
+  _auditEvent3 <- submit operator do
+    exerciseCmd auditObserver LogEvent with
+      eventType = "PRESCRIPTION_DISPENSED"
+      description = "PharmaCorp dispensed Amoxicillin for Alice"
+      timestamp = now
+
+  _auditEvent4 <- submit operator do
+    exerciseCmd auditObserver LogEvent with
+      eventType = "LAB_RESULTS_SUBMITTED"
+      description = "LabCorp submitted blood work results for Alice"
+      timestamp = now
+
+  return ()

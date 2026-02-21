@@ -164,6 +164,43 @@ test_doctorLabOrders = do
 
   return ()
 
+-- Test: Doctor creates a clinical note
+test_doctorCreateNote = do
+  (patient, drSmith, _drJones, healthRecord, accessManager) <- setupHealthRecord
+
+  doctorAccess <- submit patient do
+    exerciseCmd accessManager GrantDoctorAccess with
+      healthRecordCid = healthRecord
+      doctor = drSmith
+      duration = Days30
+
+  -- Doctor creates a clinical note
+  _note <- submit drSmith do
+    exerciseCmd doctorAccess CreateDoctorNote with
+      noteType = "Diagnosis"
+      content = "Patient presents with persistent cough. Recommend chest X-ray."
+
+  return ()
+
+-- Test: Doctor note fails after access expires
+test_doctorNoteExpiresWithAccess = do
+  (patient, _drSmith, drJones, healthRecord, accessManager) <- setupHealthRecord
+
+  doctorAccess <- submit patient do
+    exerciseCmd accessManager GrantDoctorAccess with
+      healthRecordCid = healthRecord
+      doctor = drJones
+      duration = Days30
+
+  passTime (days 31)
+
+  submitMustFail drJones do
+    exerciseCmd doctorAccess CreateDoctorNote with
+      noteType = "Follow-up"
+      content = "Should fail - access expired"
+
+  return ()
+
 -- Test 15: 30-day access expires after 31 days
 test_accessExpiry = do
   (patient, _drSmith, drJones, healthRecord, accessManager) <- setupHealthRecord

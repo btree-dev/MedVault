@@ -1,0 +1,116 @@
+module Test.PrescriptionTest where
+
+import Types
+import HealthRecord
+import AccessGrants
+import DoctorAccess
+import Prescription
+import DA.Date hiding (date)
+import DA.Time
+import Daml.Script
+
+-- Helper: create a health record, access manager, and prescription
+setupPrescription : Script (Party, Party, ContractId Prescription)
+setupPrescription = do
+  patient <- allocateParty "Alice"
+  drSmith <- allocateParty "DrSmith"
+
+  setTime (time (mkDate 2025 Jan 15) 9 0 0)
+
+  healthRecord <- submit patient do
+    createCmd HealthRecord with
+      patient = patient
+      patientInfo = PatientInfo with
+        name = "Alice Johnson"
+        dateOfBirth = mkDate 1985 Jun 12
+        bloodType = "O+"
+        emergencyContact = "Bob Johnson (spouse) - 555-0123"
+      allergies = []
+      conditions = []
+      medications = []
+      surgeries = []
+      illnesses = []
+      diagnosticHistory = []
+      prescriptionHistory = []
+      dispenseHistory = []
+      immunizations = []
+      familyHistory = []
+
+  accessManager <- submit patient do
+    createCmd PatientAccessManager with
+      patient = patient
+
+  doctorAccess <- submit patient do
+    exerciseCmd accessManager GrantDoctorAccess with
+      healthRecordCid = healthRecord
+      doctor = drSmith
+      duration = Days30
+
+  prescription <- submit drSmith do
+    exerciseCmd doctorAccess CreatePrescription with
+      medication = Medication with
+        name = "Amoxicillin"
+        dosage = "500mg"
+        frequency = "3x daily"
+        prescribedDate = mkDate 2025 Jan 15
+        prescribedBy = "DrSmith"
+      notes = "For bacterial infection"
+
+  return (patient, drSmith, prescription)
+
+-- Test: Patient marks prescription as filled
+test_markPrescriptionFilled = do
+  (patient, _drSmith, prescription) <- setupPrescription
+
+  _filledPrescription <- submit patient do
+    exerciseCmd prescription MarkFilled
+
+  return ()
+
+-- Test: Cannot mark already-filled prescription as filled again
+test_cannotDoubleMarkFilled = do
+  (patient, _drSmith, prescription) <- setupPrescription
+
+  filledPrescription <- submit patient do
+    exerciseCmd prescription MarkFilled
+
+  submitMustFail patient do
+    exerciseCmd filledPrescription MarkFilled
+
+  return ()
+
+-- Test: Patient sets course status to completed and back
+test_setCourseStatus = do
+  (patient, _drSmith, prescription) <- setupPrescription
+
+  updatedPrescription <- submit patient do
+    exerciseCmd prescription SetCourseStatus with
+      completed = True
+
+  -- Can toggle back to not completed
+  _updatedPrescription2 <- submit patient do
+    exerciseCmd updatedPrescription SetCourseStatus with
+      completed = False
+
+  return ()
+
+-- Test: Patient adds observer to prescription
+test_addObserver = do
+  (patient, _drSmith, prescription) <- setupPrescription
+
+  pharmacy <- allocateParty "PharmaCorp"
+
+  _updatedPrescription <- submit patient do
+    exerciseCmd prescription AddObserver with
+      newObserver = pharmacy
+
+  return ()
+
+-- Test: Doctor cannot mark prescription as filled (only patient can)
+test_doctorCannotMarkFilled = do
+  (patient, drSmith, prescription) <- setupPrescription
+
+  submitMustFail drSmith do
+    exerciseCmd prescription MarkFilled
+
+  return ()
