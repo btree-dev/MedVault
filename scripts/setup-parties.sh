@@ -133,7 +133,7 @@ done
 echo "  Synchronizer connected."
 
 # Default parties
-DEFAULT_PARTIES="Operator Alice Bob DrSmith DrJones PharmaCorp LabCorp"
+DEFAULT_PARTIES="Operator Alice Bob DrSmith DrJones PharmaCorp LabCorp Auditor"
 
 # Use command-line args if provided, otherwise use defaults
 # Usage: ./setup-parties.sh [party1 party2 ...]

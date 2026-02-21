@@ -8,6 +8,7 @@ import DoctorDashboard from './components/DoctorDashboard';
 import PharmacyDashboard from './components/PharmacyDashboard';
 import LabDashboard from './components/LabDashboard';
 import OperatorDashboard from './components/OperatorDashboard';
+import AuditorDashboard from './components/AuditorDashboard';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<UserSession | null>(null);
@@ -28,6 +29,8 @@ const App: React.FC = () => {
         return <LabDashboard />;
       case 'operator':
         return <OperatorDashboard />;
+      case 'auditor':
+        return <AuditorDashboard />;
     }
   };
 

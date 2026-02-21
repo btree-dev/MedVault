@@ -13,7 +13,7 @@ utils.retry_until_true {
 participant1.dars.upload(".daml/dist/MedVault-0.0.2.dar")
 
 // Allocate parties and create ledger API users
-val parties = Seq("Operator", "Alice", "Bob", "DrSmith", "DrJones", "PharmaCorp", "LabCorp")
+val parties = Seq("Operator", "Alice", "Bob", "DrSmith", "DrJones", "PharmaCorp", "LabCorp", "Auditor")
 parties.foreach { name =>
   val party = participant1.parties.enable(name)
   participant1.ledger_api.users.create(

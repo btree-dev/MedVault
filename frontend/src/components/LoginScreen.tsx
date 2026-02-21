@@ -11,6 +11,7 @@ const roleOptions = [
   { key: 'pharmacy', text: 'Pharmacy', value: 'pharmacy' },
   { key: 'lab', text: 'Lab / Diagnostic Center', value: 'lab' },
   { key: 'operator', text: 'Operator', value: 'operator' },
+  { key: 'auditor', text: 'Auditor', value: 'auditor' },
 ];
 
 const devUsers: { label: string; userId: string; role: UserRole }[] = [
@@ -20,6 +21,7 @@ const devUsers: { label: string; userId: string; role: UserRole }[] = [
   { label: 'PharmaCorp (Pharmacy)', userId: 'PharmaCorp', role: 'pharmacy' },
   { label: 'LabCorp (Lab)', userId: 'LabCorp', role: 'lab' },
   { label: 'Operator', userId: 'Operator', role: 'operator' },
+  { label: 'Auditor', userId: 'Auditor', role: 'auditor' },
 ];
 
 const isDev = !process.env.REACT_APP_LEDGER_URL;

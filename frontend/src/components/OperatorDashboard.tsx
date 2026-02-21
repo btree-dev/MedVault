@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParty, useLedger, useStreamQueries } from '../services/DamlLedger';
-import { Header, Segment, Form, Card, Button, Message } from 'semantic-ui-react';
+import { Header, Segment, Form, Card, Button, Message, Label } from 'semantic-ui-react';
 
 const OperatorDashboard: React.FC = () => {
   const party = useParty();
@@ -8,15 +8,53 @@ const OperatorDashboard: React.FC = () => {
 
   const operators = useStreamQueries('#MedVault:Operator:Operator');
   const invites = useStreamQueries('#MedVault:Operator:PatientInvite');
+  const auditObservers = useStreamQueries('#MedVault:Audit:AuditObserver');
+  const auditEvents = useStreamQueries('#MedVault:Audit:AuditEvent');
 
   const [patientParty, setPatientParty] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [auditorParty, setAuditorParty] = useState('');
+
+  useEffect(() => {
+    ledger.getPartyId('Auditor').then((p) => {
+      if (p) setAuditorParty(p);
+    }).catch(() => {});
+  }, [ledger]);
+
+  const logAuditEvent = async (eventType: string, description: string) => {
+    const observer = auditObservers.contracts[0];
+    if (!observer) return;
+    try {
+      await ledger.exercise(
+        '#MedVault:Audit:AuditObserver',
+        observer.contractId,
+        'LogEvent',
+        {
+          eventType,
+          description,
+          timestamp: new Date().toISOString(),
+        }
+      );
+    } catch (e: any) {
+      console.error('Audit log failed:', e.message);
+    }
+  };
 
   const setupOperator = async () => {
     try {
       await ledger.create('#MedVault:Operator:Operator', { operator: party });
-      setSuccess('Operator contract created');
+
+      // Create AuditObserver if Auditor party exists and no observer yet
+      if (auditorParty && auditObservers.contracts.length === 0) {
+        await ledger.create('#MedVault:Audit:AuditObserver', {
+          operator: party,
+          auditor: auditorParty,
+        });
+        setSuccess('Operator contract and AuditObserver created');
+      } else {
+        setSuccess('Operator contract created');
+      }
       setError('');
     } catch (e: any) {
       setError(e.message);
@@ -38,6 +76,7 @@ const OperatorDashboard: React.FC = () => {
         'InvitePatient',
         { patient: patientParty }
       );
+      await logAuditEvent('PATIENT_INVITED', `Invited patient ${patientParty}`);
       setPatientParty('');
       setSuccess('Invite sent');
       setError('');
@@ -90,6 +129,26 @@ const OperatorDashboard: React.FC = () => {
           </Card.Group>
         </Segment>
       )}
+
+      <Segment>
+        <Header as="h3">
+          Audit Trail
+          <Label circular color="blue" style={{ marginLeft: '0.5em' }}>
+            {auditEvents.contracts.length}
+          </Label>
+        </Header>
+        {auditObservers.contracts.length > 0 ? (
+          <p style={{ color: '#888' }}>
+            AuditObserver active. {auditEvents.contracts.length} event(s) logged.
+          </p>
+        ) : (
+          <p style={{ color: '#888' }}>
+            {auditorParty
+              ? 'AuditObserver will be created when you set up the operator contract.'
+              : 'Auditor party not found. Run setup-parties.sh to allocate the Auditor party.'}
+          </p>
+        )}
+      </Segment>
     </div>
   );
 };
