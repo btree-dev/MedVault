@@ -87,14 +87,20 @@ test_cannotDoubleMarkFilled = do
 test_setCourseStatus = do
   (patient, _drSmith, prescription) <- setupPrescription
 
+  [(hrCid1, _)] <- query @HealthRecord patient
+
   updatedPrescription <- submit patient do
     exerciseCmd prescription SetCourseStatus with
       completed = True
+      healthRecordCid = hrCid1
+
+  [(hrCid2, _)] <- query @HealthRecord patient
 
   -- Can toggle back to not completed
   _updatedPrescription2 <- submit patient do
     exerciseCmd updatedPrescription SetCourseStatus with
       completed = False
+      healthRecordCid = hrCid2
 
   return ()
 

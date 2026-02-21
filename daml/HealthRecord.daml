@@ -113,3 +113,23 @@ template HealthRecord
       do
         create this with
           diagnosticHistory = diagnosticRecord :: diagnosticHistory
+
+    -- Remove a medication by name (used when course is completed)
+    choice RemoveMedication
+      : ContractId HealthRecord
+      with
+        medicationName : Text
+      controller patient
+      do
+        create this with
+          medications = filter (\m -> m.name /= medicationName) medications
+
+    -- Re-add a medication (used when toggling course back to active)
+    choice AddMedication
+      : ContractId HealthRecord
+      with
+        medication : Medication
+      controller patient
+      do
+        create this with
+          medications = medication :: medications

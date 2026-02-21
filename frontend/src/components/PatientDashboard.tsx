@@ -279,11 +279,13 @@ const PatientDashboard: React.FC = () => {
                           color={c.payload.courseCompleted ? 'grey' : 'blue'}
                           onClick={async () => {
                             try {
+                              const hr = healthRecords.contracts[0];
+                              if (!hr) { setError('No health record found'); return; }
                               await ledger.exercise(
                                 '#MedVault:Prescription:Prescription',
                                 c.contractId,
                                 'SetCourseStatus',
-                                { completed: !c.payload.courseCompleted }
+                                { completed: !c.payload.courseCompleted, healthRecordCid: hr.contractId }
                               );
                             } catch (e: any) {
                               setError(e.message);

@@ -1,6 +1,7 @@
 module Prescription where
 
 import Types
+import HealthRecord
 import DA.Text as T
 
 -- Prescription created by doctor, owned by patient
@@ -31,8 +32,18 @@ template Prescription
       : ContractId Prescription
       with
         completed : Bool
+        healthRecordCid : ContractId HealthRecord
       controller patient
       do
+        if completed
+          then do
+            exercise healthRecordCid RemoveMedication with
+              medicationName = medication.name
+            pure ()
+          else do
+            exercise healthRecordCid AddMedication with
+              medication = medication
+            pure ()
         create this with courseCompleted = completed
 
     choice AddObserver
