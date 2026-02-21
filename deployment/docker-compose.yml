@@ -23,8 +23,24 @@ services:
     build:
       context: ..
       dockerfile: deployment/Dockerfile
-    ports:
-      - "3000:80"
+    expose:
+      - "80"
     depends_on:
       canton:
         condition: service_healthy
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+
+volumes:
+  caddy_data:
+  caddy_config:
