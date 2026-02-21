@@ -20,6 +20,7 @@ setupPrescription = do
   healthRecord <- submit patient do
     createCmd HealthRecord with
       patient = patient
+      authorizedParties = []
       patientInfo = PatientInfo with
         name = "Alice Johnson"
         dateOfBirth = mkDate 1985 Jun 12
@@ -46,6 +47,8 @@ setupPrescription = do
       doctor = drSmith
       duration = Days30
 
+  [(hrCid, _)] <- query @HealthRecord patient
+
   prescription <- submit drSmith do
     exerciseCmd doctorAccess CreatePrescription with
       medication = Medication with
@@ -55,6 +58,7 @@ setupPrescription = do
         prescribedDate = mkDate 2025 Jan 15
         prescribedBy = "DrSmith"
       notes = "For bacterial infection"
+      healthRecordCid = hrCid
 
   return (patient, drSmith, prescription)
 

@@ -20,6 +20,7 @@ test_pharmacyAccessAndDispensing = do
   healthRecord <- submit patient do
     createCmd HealthRecord with
       patient = patient
+      authorizedParties = []
       patientInfo = PatientInfo with
         name = "Alice Johnson"
         dateOfBirth = mkDate 1985 Jun 12
@@ -56,6 +57,9 @@ test_pharmacyAccessAndDispensing = do
       doctor = drSmith
       duration = Days30
 
+  -- Get updated HR cid after grant (AddAuthorizedParty consumed old one)
+  [(hrCid1, _)] <- query @HealthRecord patient
+
   prescription <- submit drSmith do
     exerciseCmd doctorAccess CreatePrescription with
       medication = Medication with
@@ -65,19 +69,27 @@ test_pharmacyAccessAndDispensing = do
         prescribedDate = mkDate 2025 Jan 15
         prescribedBy = "DrSmith"
       notes = "For bacterial infection."
+      healthRecordCid = hrCid1
+
+  -- Get updated HR cid after prescription (RecordPrescriptionInHistory consumed old one)
+  [(hrCid2, _)] <- query @HealthRecord patient
 
   -- 8. Patient grants pharmacy access to prescription
   pharmacyAccess <- submit patient do
     exerciseCmd accessManager GrantPharmacyAccess with
-      healthRecordCid = healthRecord
+      healthRecordCid = hrCid2
       pharmacy = pharmacy
       prescriptionCid = prescription
+
+  -- Get updated HR cid after pharmacy grant
+  [(hrCid3, _)] <- query @HealthRecord patient
 
   -- 9. Pharmacy acknowledges dispensing (creates DispenseEntry)
   _dispenseEntry <- submit pharmacy do
     exerciseCmd pharmacyAccess AcknowledgeDispensing with
       dispensingNote = "Dispensed as prescribed"
       markAsFilled = True
+      healthRecordCid = hrCid3
 
   return ()
 
@@ -92,6 +104,7 @@ test_revokePharmacyAccess = do
   healthRecord <- submit patient do
     createCmd HealthRecord with
       patient = patient
+      authorizedParties = []
       patientInfo = PatientInfo with
         name = "Alice Johnson"
         dateOfBirth = mkDate 1985 Jun 12
@@ -118,6 +131,8 @@ test_revokePharmacyAccess = do
       doctor = drSmith
       duration = Days30
 
+  [(hrCid1, _)] <- query @HealthRecord patient
+
   prescription <- submit drSmith do
     exerciseCmd doctorAccess CreatePrescription with
       medication = Medication with
@@ -127,10 +142,13 @@ test_revokePharmacyAccess = do
         prescribedDate = mkDate 2025 Jan 15
         prescribedBy = "DrSmith"
       notes = "For bacterial infection."
+      healthRecordCid = hrCid1
+
+  [(hrCid2, _)] <- query @HealthRecord patient
 
   pharmacyAccess <- submit patient do
     exerciseCmd accessManager GrantPharmacyAccess with
-      healthRecordCid = healthRecord
+      healthRecordCid = hrCid2
       pharmacy = pharmacy
       prescriptionCid = prescription
 
@@ -138,11 +156,14 @@ test_revokePharmacyAccess = do
   submit patient do
     exerciseCmd pharmacyAccess RevokePharmacyAccess
 
+  [(hrCid3, _)] <- query @HealthRecord patient
+
   -- Pharmacy cannot dispense after revocation
   submitMustFail pharmacy do
     exerciseCmd pharmacyAccess AcknowledgeDispensing with
       dispensingNote = "Should fail"
       markAsFilled = False
+      healthRecordCid = hrCid3
 
   return ()
 
@@ -157,6 +178,7 @@ test_pharmacyDispenseWithoutFilled = do
   healthRecord <- submit patient do
     createCmd HealthRecord with
       patient = patient
+      authorizedParties = []
       patientInfo = PatientInfo with
         name = "Alice Johnson"
         dateOfBirth = mkDate 1985 Jun 12
@@ -183,6 +205,8 @@ test_pharmacyDispenseWithoutFilled = do
       doctor = drSmith
       duration = Days30
 
+  [(hrCid1, _)] <- query @HealthRecord patient
+
   prescription <- submit drSmith do
     exerciseCmd doctorAccess CreatePrescription with
       medication = Medication with
@@ -192,17 +216,23 @@ test_pharmacyDispenseWithoutFilled = do
         prescribedDate = mkDate 2025 Jan 15
         prescribedBy = "DrSmith"
       notes = "For pain relief"
+      healthRecordCid = hrCid1
+
+  [(hrCid2, _)] <- query @HealthRecord patient
 
   pharmacyAccess <- submit patient do
     exerciseCmd accessManager GrantPharmacyAccess with
-      healthRecordCid = healthRecord
+      healthRecordCid = hrCid2
       pharmacy = pharmacy
       prescriptionCid = prescription
+
+  [(hrCid3, _)] <- query @HealthRecord patient
 
   -- Pharmacy dispenses without marking as filled (partial fill)
   _dispenseEntry <- submit pharmacy do
     exerciseCmd pharmacyAccess AcknowledgeDispensing with
       dispensingNote = "Partial fill - 15 tablets dispensed"
       markAsFilled = False
+      healthRecordCid = hrCid3
 
   return ()

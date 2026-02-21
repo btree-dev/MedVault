@@ -197,10 +197,6 @@ const PatientDashboard: React.FC = () => {
       {record ? (
         <MedicalHistoryView
           record={record}
-          prescriptions={prescriptions.contracts}
-          dispenseEntries={dispenseEntries.contracts}
-          labOrders={labOrders.contracts}
-          labResults={labResults.contracts}
         />
       ) : (
         !invites.contracts.length && <Message info>No health record found. Ask your operator to send you an invite.</Message>

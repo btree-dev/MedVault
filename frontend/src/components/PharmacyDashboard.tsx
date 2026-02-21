@@ -7,19 +7,22 @@ const PharmacyDashboard: React.FC = () => {
   const ledger = useLedger();
 
   const pharmacyAccesses = useStreamQueries('#MedVault:PharmacyAccess:PharmacyAccess');
+  const healthRecords = useStreamQueries('#MedVault:HealthRecord:HealthRecord');
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [dispensingNotes, setDispensingNotes] = useState<Record<string, string>>({});
   const [markFilled, setMarkFilled] = useState<Record<string, boolean>>({});
 
-  const acknowledgeDispensing = async (contractId: string) => {
+  const acknowledgeDispensing = async (contractId: string, patientParty: string) => {
     try {
+      const hrContract = healthRecords.contracts.find((c: any) => c.payload.patient === patientParty);
+      if (!hrContract) { setError('No health record found for patient'); return; }
       await ledger.exercise(
         '#MedVault:PharmacyAccess:PharmacyAccess',
         contractId,
         'AcknowledgeDispensing',
-        { dispensingNote: dispensingNotes[contractId] || '', markAsFilled: markFilled[contractId] || false }
+        { dispensingNote: dispensingNotes[contractId] || '', markAsFilled: markFilled[contractId] || false, healthRecordCid: hrContract.contractId }
       );
       setSuccess('Medication dispensed and recorded');
       setError('');
@@ -112,7 +115,7 @@ const PharmacyDashboard: React.FC = () => {
                         onChange={(_, { checked }) => setMarkFilled(prev => ({ ...prev, [c.contractId]: !!checked }))}
                       />
                     </Form.Field>
-                    <Button primary onClick={() => acknowledgeDispensing(c.contractId)}>
+                    <Button primary onClick={() => acknowledgeDispensing(c.contractId, c.payload.patient)}>
                       Dispense Medication
                     </Button>
                   </Form>

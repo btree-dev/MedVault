@@ -3,6 +3,7 @@ module DiagnosticAccess where
 import Types
 import LabOrder
 import LabResults
+import HealthRecord
 import DA.Text as T
 
 -- Diagnostic center access to lab order
@@ -20,9 +21,17 @@ template DiagnosticAccess
       with
         findings : Text
         resultDate : Date
+        healthRecordCid : ContractId HealthRecord
       controller diagnosticCenter
       do
         assertMsg "Findings cannot be empty" (T.length findings > 0)
+        exercise healthRecordCid RecordLabResultInHistory with
+          diagnosticRecord = DiagnosticRecord with
+            diagType = show labOrder.labType
+            date = resultDate
+            facility = show diagnosticCenter
+            findings = findings
+            orderedBy = show labOrder.doctor
         create LabResultReport with
           patient = patient
           diagnosticCenter = diagnosticCenter

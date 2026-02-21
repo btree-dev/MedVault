@@ -20,6 +20,7 @@ test_diagnosticAccessAndResults = do
   healthRecord <- submit patient do
     createCmd HealthRecord with
       patient = patient
+      authorizedParties = []
       patientInfo = PatientInfo with
         name = "Alice Johnson"
         dateOfBirth = mkDate 1985 Jun 12
@@ -47,35 +48,56 @@ test_diagnosticAccessAndResults = do
       doctor = drSmith
       duration = Days30
 
+  [(hrCid1, _)] <- query @HealthRecord patient
+
   labOrder <- submit drSmith do
     exerciseCmd doctorAccess CreateLabOrder with
       labType = BloodWork
       reason = "Routine blood panel for hypertension monitoring"
+      healthRecordCid = hrCid1
+
+  [(hrCid2, _)] <- query @HealthRecord patient
 
   -- 10. Patient grants diagnostic center access to lab order
   diagnosticAccess <- submit patient do
     exerciseCmd accessManager GrantDiagnosticAccess with
-      healthRecordCid = healthRecord
+      healthRecordCid = hrCid2
       diagnosticCenter = labCorp
       labOrderCid = labOrder
+
+  [(hrCid3, _)] <- query @HealthRecord patient
 
   -- 11. Diagnostic center submits lab results
   _labReport <- submit labCorp do
     exerciseCmd diagnosticAccess SubmitLabResults with
       findings = "CBC normal. Cholesterol slightly elevated at 210."
       resultDate = mkDate 2025 Jan 20
+      healthRecordCid = hrCid3
 
-  -- 12. Empty findings should fail
+  -- 12. Empty findings should fail - need a new diagnostic access since the previous one was consumed
+  [(hrCid4, _)] <- query @HealthRecord patient
+
+  labOrder2 <- submit drSmith do
+    exerciseCmd doctorAccess CreateLabOrder with
+      labType = BloodWork
+      reason = "Follow-up blood panel"
+      healthRecordCid = hrCid4
+
+  [(hrCid5, _)] <- query @HealthRecord patient
+
   diagnosticAccess2 <- submit patient do
     exerciseCmd accessManager GrantDiagnosticAccess with
-      healthRecordCid = healthRecord
+      healthRecordCid = hrCid5
       diagnosticCenter = labCorp
-      labOrderCid = labOrder
+      labOrderCid = labOrder2
+
+  [(hrCid6, _)] <- query @HealthRecord patient
 
   submitMustFail labCorp do
     exerciseCmd diagnosticAccess2 SubmitLabResults with
       findings = ""
       resultDate = mkDate 2025 Jan 20
+      healthRecordCid = hrCid6
 
   return ()
 
@@ -90,6 +112,7 @@ test_revokeDiagnosticAccess = do
   healthRecord <- submit patient do
     createCmd HealthRecord with
       patient = patient
+      authorizedParties = []
       patientInfo = PatientInfo with
         name = "Alice Johnson"
         dateOfBirth = mkDate 1985 Jun 12
@@ -116,14 +139,19 @@ test_revokeDiagnosticAccess = do
       doctor = drSmith
       duration = Days30
 
+  [(hrCid1, _)] <- query @HealthRecord patient
+
   labOrder <- submit drSmith do
     exerciseCmd doctorAccess CreateLabOrder with
       labType = MRI
       reason = "Brain MRI for persistent headaches"
+      healthRecordCid = hrCid1
+
+  [(hrCid2, _)] <- query @HealthRecord patient
 
   diagnosticAccess <- submit patient do
     exerciseCmd accessManager GrantDiagnosticAccess with
-      healthRecordCid = healthRecord
+      healthRecordCid = hrCid2
       diagnosticCenter = labCorp
       labOrderCid = labOrder
 
@@ -131,10 +159,13 @@ test_revokeDiagnosticAccess = do
   submit patient do
     exerciseCmd diagnosticAccess RevokeDiagnosticAccess
 
+  [(hrCid3, _)] <- query @HealthRecord patient
+
   -- Diagnostic center cannot submit results after revocation
   submitMustFail labCorp do
     exerciseCmd diagnosticAccess SubmitLabResults with
       findings = "Should fail - access revoked"
       resultDate = mkDate 2025 Jan 20
+      healthRecordCid = hrCid3
 
   return ()

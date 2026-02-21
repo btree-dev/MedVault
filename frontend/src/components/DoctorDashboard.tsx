@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParty, useLedger, useStreamQueries } from '../services/DamlLedger';
 import { Header, Segment, Form, Card, Button, Message, Dropdown, Table, Label } from 'semantic-ui-react';
 import MedicalHistoryView from './MedicalHistoryView';
@@ -17,6 +17,7 @@ const DoctorDashboard: React.FC = () => {
   const ledger = useLedger();
 
   const doctorAccesses = useStreamQueries('#MedVault:DoctorAccess:DoctorAccess');
+  const healthRecords = useStreamQueries('#MedVault:HealthRecord:HealthRecord');
   const prescriptions = useStreamQueries('#MedVault:Prescription:Prescription');
   const labOrders = useStreamQueries('#MedVault:LabOrder:LabOrder');
   const doctorNotes = useStreamQueries('#MedVault:DoctorNote:DoctorNote');
@@ -38,22 +39,11 @@ const DoctorDashboard: React.FC = () => {
     (c: any) => c.payload.patient === selectedPatientParty
   ) as any;
 
-  // Clear selection if the patient's access no longer exists
-  useEffect(() => {
-    if (selectedPatientParty && !selectedPatient) {
-      // Check if there's still a contract for this patient (may have been recreated)
-      const stillExists = doctorAccesses.contracts.some(
-        (c: any) => c.payload.patient === selectedPatientParty
-      );
-      if (!stillExists) {
-        setSelectedPatientParty(null);
-      }
-    }
-  }, [doctorAccesses.contracts, selectedPatientParty, selectedPatient]);
-
   const createPrescription = async () => {
     if (!selectedPatient || !medName) return;
     try {
+      const hrContract = healthRecords.contracts.find((c: any) => c.payload.patient === selectedPatientParty);
+      if (!hrContract) { setError('No health record found for patient'); return; }
       await ledger.exercise(
         '#MedVault:DoctorAccess:DoctorAccess',
         selectedPatient.contractId,
@@ -67,6 +57,7 @@ const DoctorDashboard: React.FC = () => {
             prescribedBy: party,
           },
           notes: prescNotes,
+          healthRecordCid: hrContract.contractId,
         }
       );
       setMedName('');
@@ -84,11 +75,13 @@ const DoctorDashboard: React.FC = () => {
   const createLabOrder = async () => {
     if (!selectedPatient || !labReason) return;
     try {
+      const hrContract = healthRecords.contracts.find((c: any) => c.payload.patient === selectedPatientParty);
+      if (!hrContract) { setError('No health record found for patient'); return; }
       await ledger.exercise(
         '#MedVault:DoctorAccess:DoctorAccess',
         selectedPatient.contractId,
         'CreateLabOrder',
-        { labType, reason: labReason }
+        { labType, reason: labReason, healthRecordCid: hrContract.contractId }
       );
       setLabReason('');
       setSuccess('Lab order created and recorded in patient history');
@@ -155,12 +148,17 @@ const DoctorDashboard: React.FC = () => {
           </Segment>
 
           {/* Selected Patient Details */}
-          {selectedPatientParty && selectedPatient && (
-            <>
+          {selectedPatientParty && selectedPatient && (() => {
+            // Use live HealthRecord (doctor is an authorized observer) for up-to-date
+            // dispenseHistory, diagnosticHistory, etc. Fall back to DoctorAccess snapshot.
+            const liveRecord = healthRecords.contracts.find((c: any) => c.payload.patient === selectedPatientParty)?.payload;
+            return <>
               <MedicalHistoryView
-                record={selectedPatient.payload}
-                prescriptions={prescriptions.contracts.filter((c: any) => c.payload.patient === selectedPatientParty)}
-                labOrders={labOrders.contracts.filter((c: any) => c.payload.patient === selectedPatientParty)}
+                record={liveRecord || selectedPatient.payload}
+                // When using live HealthRecord, it already contains prescription/lab data via
+                // Record*InHistory — don't also pass live contracts or they'll appear twice.
+                prescriptions={liveRecord ? undefined : prescriptions.contracts.filter((c: any) => c.payload.patient === selectedPatientParty)}
+                labOrders={liveRecord ? undefined : labOrders.contracts.filter((c: any) => c.payload.patient === selectedPatientParty)}
               />
 
               {/* Doctor's clinical notes for this patient */}
@@ -240,8 +238,8 @@ const DoctorDashboard: React.FC = () => {
                   <Button primary onClick={createDoctorNote}>Add Note</Button>
                 </Form>
               </Segment>
-            </>
-          )}
+            </>;
+          })()}
         </>
       )}
     </div>

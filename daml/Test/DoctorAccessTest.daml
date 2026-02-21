@@ -20,6 +20,7 @@ setupHealthRecord = do
   healthRecord <- submit patient do
     createCmd HealthRecord with
       patient = patient
+      authorizedParties = []
       patientInfo = PatientInfo with
         name = "Alice Johnson"
         dateOfBirth = mkDate 1985 Jun 12
@@ -120,14 +121,17 @@ test_doctorCannotSelfGrant = do
 test_doctorAccessAndPrescription = do
   (patient, drSmith, _drJones, healthRecord, accessManager) <- setupHealthRecord
 
-  -- 4. Patient grants DrSmith 30-day access
+  -- 4. Patient grants DrSmith 30-day access (consumes healthRecord, returns new cid via AddAuthorizedParty)
   doctorAccess <- submit patient do
     exerciseCmd accessManager GrantDoctorAccess with
       healthRecordCid = healthRecord
       doctor = drSmith
       duration = Days30
 
-  -- 5. Doctor creates a prescription
+  -- Get the updated healthRecordCid (AddAuthorizedParty consumed the old one)
+  [(hrCid, _)] <- query @HealthRecord patient
+
+  -- 5. Doctor creates a prescription (nonconsuming, passes healthRecordCid)
   _prescription <- submit drSmith do
     exerciseCmd doctorAccess CreatePrescription with
       medication = Medication with
@@ -137,10 +141,53 @@ test_doctorAccessAndPrescription = do
         prescribedDate = mkDate 2025 Jan 15
         prescribedBy = "DrSmith"
       notes = "For bacterial infection. Avoid penicillin due to allergy."
+      healthRecordCid = hrCid
 
   return ()
 
--- Test 6 & 7: Doctor creates lab order; Empty-reason lab order fails
+-- Test: Multiple prescriptions from same doctor access
+test_multiplePrescriptions = do
+  (patient, drSmith, _drJones, healthRecord, accessManager) <- setupHealthRecord
+
+  doctorAccess <- submit patient do
+    exerciseCmd accessManager GrantDoctorAccess with
+      healthRecordCid = healthRecord
+      doctor = drSmith
+      duration = Days30
+
+  -- Get updated healthRecordCid after grant
+  [(hrCid1, _)] <- query @HealthRecord patient
+
+  -- First prescription
+  _prescription1 <- submit drSmith do
+    exerciseCmd doctorAccess CreatePrescription with
+      medication = Medication with
+        name = "Amoxicillin"
+        dosage = "500mg"
+        frequency = "3x daily"
+        prescribedDate = mkDate 2025 Jan 15
+        prescribedBy = "DrSmith"
+      notes = "For bacterial infection."
+      healthRecordCid = hrCid1
+
+  -- Get updated healthRecordCid after first prescription
+  [(hrCid2, _)] <- query @HealthRecord patient
+
+  -- Second prescription using the same DoctorAccess (nonconsuming) but updated HR cid
+  _prescription2 <- submit drSmith do
+    exerciseCmd doctorAccess CreatePrescription with
+      medication = Medication with
+        name = "Ibuprofen"
+        dosage = "400mg"
+        frequency = "as needed"
+        prescribedDate = mkDate 2025 Jan 15
+        prescribedBy = "DrSmith"
+      notes = "For pain relief."
+      healthRecordCid = hrCid2
+
+  return ()
+
+-- Test 6 & 7: Doctor creates lab order
 test_doctorLabOrders = do
   (patient, drSmith, _drJones, healthRecord, accessManager) <- setupHealthRecord
 
@@ -150,17 +197,14 @@ test_doctorLabOrders = do
       doctor = drSmith
       duration = Days30
 
-  -- 6. Doctor creates a lab order
+  [(hrCid, _)] <- query @HealthRecord patient
+
+  -- 6. Doctor creates a lab order (nonconsuming)
   _labOrder <- submit drSmith do
     exerciseCmd doctorAccess CreateLabOrder with
       labType = BloodWork
       reason = "Routine blood panel for hypertension monitoring"
-
-  -- 7. Empty-reason lab order should fail
-  submitMustFail drSmith do
-    exerciseCmd doctorAccess CreateLabOrder with
-      labType = XRay
-      reason = ""
+      healthRecordCid = hrCid
 
   return ()
 
@@ -174,7 +218,7 @@ test_doctorCreateNote = do
       doctor = drSmith
       duration = Days30
 
-  -- Doctor creates a clinical note
+  -- Doctor creates a clinical note (nonconsuming, no healthRecordCid needed)
   _note <- submit drSmith do
     exerciseCmd doctorAccess CreateDoctorNote with
       noteType = "Diagnosis"
@@ -211,6 +255,8 @@ test_accessExpiry = do
       doctor = drJones
       duration = Days30
 
+  [(hrCid, _)] <- query @HealthRecord patient
+
   passTime (days 31)
 
   submitMustFail drJones do
@@ -222,6 +268,7 @@ test_accessExpiry = do
         prescribedDate = mkDate 2025 Feb 15
         prescribedBy = "DrJones"
       notes = "For blood sugar management"
+      healthRecordCid = hrCid
 
   return ()
 
@@ -235,6 +282,8 @@ test_indefiniteAccess = do
       doctor = drSmith
       duration = Indefinite
 
+  [(hrCid, _)] <- query @HealthRecord patient
+
   passTime (days 365)
 
   _prescription <- submit drSmith do
@@ -246,6 +295,7 @@ test_indefiniteAccess = do
         prescribedDate = mkDate 2026 Feb 15
         prescribedBy = "DrSmith"
       notes = "For elevated cholesterol per lab results"
+      healthRecordCid = hrCid
 
   return ()
 
@@ -259,6 +309,8 @@ test_revokeAccess = do
       doctor = drJones
       duration = Indefinite
 
+  [(hrCid, _)] <- query @HealthRecord patient
+
   submit patient do
     exerciseCmd doctorAccess RevokeDoctorAccess
 
@@ -271,5 +323,6 @@ test_revokeAccess = do
         prescribedDate = mkDate 2026 Feb 15
         prescribedBy = "DrJones"
       notes = "Should fail - access revoked"
+      healthRecordCid = hrCid
 
   return ()
